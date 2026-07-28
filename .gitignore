@@ -1,0 +1,5 @@
+*.o
+ezalb
+boot_test
+.clangd
+.DS_Store
