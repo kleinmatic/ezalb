@@ -1,8 +1,12 @@
 CC = cc
 SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 SDL_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+ZLIB_LIBS  := $(shell pkg-config --libs zlib 2>/dev/null)
+ifeq ($(ZLIB_LIBS),)
+ZLIB_LIBS  := -lz
+endif
 CFLAGS = -std=c11 -O2 -g -Wall -Wextra -Wno-unused-parameter -D_DEFAULT_SOURCE -I. $(SDL_CFLAGS)
-LDLIBS = $(SDL_LIBS) -lpthread
+LDLIBS = $(SDL_LIBS) $(ZLIB_LIBS) -lpthread
 
 OBJS = common.o \
        i8051/cpu.o i8051/op.o i8051/peripheral.o \
@@ -10,9 +14,11 @@ OBJS = common.o \
        lk201/lk201.o lk201/keys.o \
        ssu/chan.o ssu/session.o ssu/xonoff.o ssu/config.o \
        host/comm.o host/logging.o host/unicode.o host/headless.o \
-       host/fb_render.o host/sdl.o host/text.o host/termkey.o
+       host/fb_render.o host/sdl.o host/text.o host/termkey.o \
+       host/ctl.o host/mcp.o host/json.o host/png.o
 
-HDRS = common.h i8051/i8051.h machine/machine.h lk201/lk201.h ssu/ssu.h host/host.h
+HDRS = common.h i8051/i8051.h machine/machine.h lk201/lk201.h ssu/ssu.h host/host.h \
+       host/ctl.h host/mcp.h host/json.h host/png.h
 
 all: ezalb
 
@@ -25,10 +31,13 @@ boot_test: $(OBJS) tests/boot_test.o
 test: boot_test
 	./boot_test roms/vt420/23-068E9-00.bin
 
+mcp_test: ezalb
+	tests/mcp_test.sh ./ezalb roms/vt420/23-068E9-00.bin
+
 %.o: %.c $(HDRS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	rm -f $(OBJS) main.o tests/boot_test.o ezalb boot_test
 
-.PHONY: all test clean
+.PHONY: all test mcp_test clean

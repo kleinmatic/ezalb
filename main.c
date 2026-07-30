@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "host/host.h"
+#include "host/mcp.h"
 
 typedef enum display_mode {
     DISPLAY_HEADLESS = 0, DISPLAY_TEXT, DISPLAY_GRAPHICS
@@ -20,9 +21,10 @@ typedef struct cli_args {
     display_mode   display; /* HEADLESS unless display_set */
     bool           display_set;
     session_config comm1, comm2;
+    const char    *comm1_str, *comm2_str; /* raw argv values (for --mcp) */
     bool           comm1_set, comm2_set;
     bool           show_vram, show_mapper;
-    bool           log_enable, verbose, benchmark, skip_diagnostics;
+    bool           log_enable, verbose, benchmark, skip_diagnostics, mcp;
     machine_type   machine;
 } cli_args;
 
@@ -43,6 +45,7 @@ static const char USAGE[] =
     "  -v, --verbose            Enable verbose output\n"
     "      --benchmark          Run the benchmark mode to see how many cycles we can hit\n"
     "      --skip-diagnostics   Skip diagnostics\n"
+    "      --mcp                Run as an MCP server on stdio (for AI agents)\n"
     "      --machine <TYPE>     Machine type [default: vt420] [possible values: vt420, vt52x, vt510]\n"
     "  -h, --help               Print help\n";
 
@@ -101,6 +104,7 @@ static int parse_args(int argc, char **argv, cli_args *a)
         if (strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0) { a->verbose = true; continue; }
         if (strcmp(arg, "--benchmark") == 0)        { a->benchmark = true; continue; }
         if (strcmp(arg, "--skip-diagnostics") == 0) { a->skip_diagnostics = true; continue; }
+        if (strcmp(arg, "--mcp") == 0)              { a->mcp = true; continue; }
         if (strcmp(arg, "--log") == 0)              { a->log_enable = true; continue; }
         if (strcmp(arg, "--show-vram") == 0)        { a->show_vram = true; continue; }
         if (strcmp(arg, "--show-mapper") == 0)      { a->show_mapper = true; continue; }
@@ -151,6 +155,7 @@ static int parse_args(int argc, char **argv, cli_args *a)
                 return -1;
             }
             a->comm1_set = true;
+            a->comm1_str = v;
             continue;
         }
         if ((r = flag_value(argc, argv, &i, "--comm2", &v)) != 0) {
@@ -166,6 +171,7 @@ static int parse_args(int argc, char **argv, cli_args *a)
                 return -1;
             }
             a->comm2_set = true;
+            a->comm2_str = v;
             continue;
         }
 
@@ -185,6 +191,14 @@ static int parse_args(int argc, char **argv, cli_args *a)
     }
     if ((a->show_vram || a->show_mapper) && !a->display_set) {
         fprintf(stderr, "error: '--show-vram'/'--show-mapper' require '--display'\n");
+        return -1;
+    }
+    if (a->mcp && (a->display_set || a->benchmark)) {
+        fprintf(stderr, "error: '--mcp' cannot be used with '--display' or '--benchmark'\n");
+        return -1;
+    }
+    if (a->mcp && a->machine != MACHINE_VT420) {
+        fprintf(stderr, "error: '--mcp' requires the vt420 machine\n");
         return -1;
     }
     return 0;
@@ -352,6 +366,19 @@ static int run_vt5xx(const cli_args *args, vt5xx_kind kind, const char *name)
     return rc;
 }
 
+static int run_mcp(const cli_args *args)
+{
+    size_t rom_len = 0;
+    uint8_t *rom = load_rom(args->rom_path, &rom_len);
+
+    if (!rom)
+        return 1;
+    int rc = mcp_run(rom, (uint32_t)rom_len, args->nvr_path,
+                     args->comm1_str, args->comm2_str, args->skip_diagnostics);
+    free(rom);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     cli_args args;
@@ -379,6 +406,14 @@ int main(int argc, char **argv)
     ssu_global_init();
 
     int rc = 1;
+    if (args.mcp) {
+        rc = run_mcp(&args);
+        if (args.comm1_set)
+            session_config_free(&args.comm1);
+        if (args.comm2_set)
+            session_config_free(&args.comm2);
+        return rc;
+    }
     switch (args.machine) {
     case MACHINE_VT420: rc = run_vt420(&args); break;
     case MACHINE_VT52X: rc = run_vt5xx(&args, VT5XX_KIND_VT52X, "VT52x"); break;

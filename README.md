@@ -17,16 +17,19 @@ Ezalb is a rewrite of [blaze](https://github.com/mmastrac/blaze) in plain C.
   a pipe/FIFO, or loopback
 - NVR (EEPROM) persistence to a file — Set-Up changes survive restarts
 - Three display modes: SDL2 window, ANSI TUI in your terminal, headless
+- MCP server mode: AI agents (Claude Code) can run the terminal, type on the
+  LK201, and take screenshots
 - VT510 / VT520 / VT525 ROMs boot headless (machine support is skeletal)
 
 ## Build
 
-Requires a C compiler, SDL2 and pkg-config
-(`brew install sdl2` / `apt install libsdl2-dev pkg-config`).
+Requires a C compiler, SDL2, zlib and pkg-config
+(`brew install sdl2` / `apt install libsdl2-dev zlib1g-dev pkg-config`).
 
 ```
 make            # builds ./ezalb
 make test       # runs the ROM boot test: boots to "VT420 OK", enters Set-Up
+make mcp_test   # MCP smoke test: boots, types into a shell, screenshots
 ```
 
 ## Quick start
@@ -57,6 +60,7 @@ fast-forwards it.
 --comm1 / --comm2 CFG serial session: loopback | pipe PATH |
                       exec CMD [--no-pty] [--rows N] [--cols N]
 --machine TYPE        vt420 (default) | vt52x | vt510
+--mcp                 run as an MCP server on stdio (see below)
 --benchmark           run 100M instructions and report speed
 --skip-diagnostics    fast-forward power-on self-test
 --log                 log to $TMPDIR/ezalb-vt.log (text mode)
@@ -68,6 +72,32 @@ Keys: F1–F20 map to the LK201 (F3 = Set-Up, F4 = switch session), arrows,
 Home/End/PgUp/PgDn = Find/Select/Prev/Next Screen, Backspace = Delete.
 Text mode is commanded via Ctrl+G: `q` quit, space pause, `1`–`5` = F1–F5,
 `h` hex view, `d` dump VRAM to /tmp/vram.bin.
+
+## MCP server — drive the VT420 from Claude Code
+
+`ezalb --mcp` runs the machine headless behind an
+[MCP](https://modelcontextprotocol.io) server on stdio, so an AI agent can use
+the terminal like a person at the console: run full-screen applications on the
+serial ports, type on the LK201, watch the screen. This repo ships a
+`.mcp.json` that starts it with a shell on comm1; for your own project:
+
+```
+claude mcp add vt420 -- /path/to/ezalb --mcp \
+    --rom /path/to/roms/vt420/23-068E9-00.bin --skip-diagnostics \
+    --nvr ~/.vt420.nvr --comm1 'exec /bin/sh'
+```
+
+Tools: `read_screen` (text, with optional attribute annotations),
+`screenshot` (pixel-exact 800x416 PNG), `type` / `key` (LK201 input, paced
+like human typing — the firmware drops faster keystrokes), `wait`
+(expect-style: block until text appears on screen), `record` (frame series:
+blink, smooth scroll), `session` (swap comm1/comm2 to a new `exec ...` at
+runtime), `reset` (power-cycle), `pace` (speed / deterministic pause),
+`status`.
+
+The machine free-runs at 10x real time; waits are in emulated ms. Serial-line
+realities apply: after `reset` or `session`, `wait` for the program's prompt
+before typing, or the pty will flush your input.
 
 ## ROMs
 
