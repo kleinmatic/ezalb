@@ -345,11 +345,11 @@ static int load_nvr_file(vt420_system *sys, const char *path)
             LOG_ERRORF("Failed to create NVR file \"%s\": %s", path, strerror(errno));
             return -1;
         }
-        uint8_t init[128];
-        memset(init, 0xff, sizeof init);
-        size_t wrote = fwrite(init, 1, sizeof init, f);
+        /* Seed with the factory image, not erased 0xFF (deviation from the
+         * Rust original, which boots a new file into "NVR Error 1"). */
+        size_t wrote = fwrite(VT420_DEFAULT_NVR, 1, sizeof VT420_DEFAULT_NVR, f);
         fclose(f);
-        if (wrote != sizeof init) {
+        if (wrote != sizeof VT420_DEFAULT_NVR) {
             LOG_ERRORF("Failed to write NVR file \"%s\"", path);
             return -1;
         }
