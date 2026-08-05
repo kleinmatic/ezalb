@@ -3,3 +3,6 @@ ezalb
 boot_test
 .clangd
 .DS_Store
+build/
+.env
+dist/

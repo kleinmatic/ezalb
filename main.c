@@ -7,6 +7,15 @@
 #include "host/host.h"
 #include "host/mcp.h"
 
+#if defined(__APPLE__) || defined(__linux__)
+#include <limits.h>
+#include <pwd.h>
+#include <sys/types.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+#endif
+
 typedef enum display_mode {
     DISPLAY_HEADLESS = 0, DISPLAY_TEXT, DISPLAY_GRAPHICS
 } display_mode;
@@ -87,11 +96,77 @@ static int parse_machine(const char *s, machine_type *out)
     return -1;
 }
 
+#if defined(__APPLE__) || defined(__linux__)
+/* Launched with no arguments from an installed app (Finder / .desktop): if a
+ * ROM is found relative to the executable (mac: Contents/Resources, linux:
+ * ../share/ezalb or /usr/share/ezalb), default to the graphical display with
+ * a login shell on comm1 and NVR persistence in $HOME. */
+static bool app_defaults(cli_args *a)
+{
+    static char rom[PATH_MAX + 64], nvr[PATH_MAX + 32], comm1[PATH_MAX + 48];
+    char real[PATH_MAX];
+    char *slash;
+
+#ifdef __APPLE__
+    char exe[PATH_MAX];
+    uint32_t n = sizeof exe;
+    if (_NSGetExecutablePath(exe, &n) != 0 || !realpath(exe, real))
+        return false;
+#else
+    ssize_t len = readlink("/proc/self/exe", real, sizeof real - 1);
+    if (len <= 0)
+        return false;
+    real[len] = '\0';
+#endif
+    if (!(slash = strrchr(real, '/')))
+        return false;
+    *slash = '\0';
+#ifdef __APPLE__
+    snprintf(rom, sizeof rom, "%s/../Resources/roms/vt420/23-068E9-00.bin", real);
+#else
+    snprintf(rom, sizeof rom, "%s/../share/ezalb/roms/vt420/23-068E9-00.bin", real);
+    if (access(rom, R_OK) != 0)
+        snprintf(rom, sizeof rom, "/usr/share/ezalb/roms/vt420/23-068E9-00.bin");
+#endif
+    if (access(rom, R_OK) != 0)
+        return false;
+
+    struct passwd *pw = getpwuid(getuid());
+    const char *fallback = "/bin/sh";
+#ifdef __APPLE__
+    fallback = "/bin/zsh";
+#endif
+    const char *shell = (pw && pw->pw_shell && pw->pw_shell[0]) ? pw->pw_shell : fallback;
+    const char *home = getenv("HOME");
+    if (!home && pw)
+        home = pw->pw_dir;
+
+    snprintf(comm1, sizeof comm1, "exec 'TERM=vt420 exec %s -l'", shell);
+    if (session_config_parse(comm1, &a->comm1, NULL, 0) != 0)
+        return false;
+    a->comm1_set = true;
+    a->comm1_str = comm1;
+    a->rom_path = rom;
+    a->display = DISPLAY_GRAPHICS;
+    a->display_set = true;
+    if (home) {
+        snprintf(nvr, sizeof nvr, "%s/.vt420.nvr", home);
+        a->nvr_path = nvr;
+    }
+    return true;
+}
+#endif
+
 static int parse_args(int argc, char **argv, cli_args *a)
 {
     char err[256];
 
     memset(a, 0, sizeof *a);
+#if defined(__APPLE__) || defined(__linux__)
+    if ((argc == 1 || (argc == 2 && strncmp(argv[1], "-psn", 4) == 0)) &&
+        app_defaults(a))
+        return 0;
+#endif
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         const char *v;

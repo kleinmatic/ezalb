@@ -32,6 +32,19 @@ make test       # runs the ROM boot test: boots to "VT420 OK", enters Set-Up
 make mcp_test   # MCP smoke test: boots, types into a shell, screenshots
 ```
 
+## Packages
+
+```
+make app        # macOS Ezalb.app (bundled ROM + SDL, double-click = shell)
+make dmg        # build/Ezalb.dmg
+make release    # signed + notarized dmg (DEV_ID/NOTARY_PROFILE in .env)
+make deb rpm    # Linux packages via docker, output in dist/
+                # cross-arch: deb-amd64 deb-arm64 rpm-amd64 rpm-arm64
+```
+
+Installed apps launched with no arguments (Finder / .desktop) boot straight
+into a login shell on comm1 in graphics mode, with NVR in `~/.vt420.nvr`.
+
 ## Quick start
 
 ```
