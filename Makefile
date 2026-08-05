@@ -98,6 +98,11 @@ release: app
 	@test -n "$(NOTARY_PROFILE)" || { echo "NOTARY_PROFILE not set — copy .env.example to .env and fill in"; exit 1; }
 	codesign --force --options runtime --timestamp --sign "$(DEV_ID)" $(APP)/Contents/Frameworks/*.dylib
 	codesign --force --options runtime --timestamp --sign "$(DEV_ID)" $(APP)
+	# staple the .app too, so it still validates once dragged out of the dmg
+	ditto -c -k --keepParent $(APP) $(BUILD)/Ezalb-app.zip
+	xcrun notarytool submit $(BUILD)/Ezalb-app.zip --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun stapler staple $(APP)
+	@rm -f $(BUILD)/Ezalb-app.zip
 	$(call build_dmg,$(DMG))
 	codesign --force --timestamp --sign "$(DEV_ID)" $(DMG)
 	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
