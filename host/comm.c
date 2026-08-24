@@ -32,6 +32,7 @@ int comm_connect_session(comm_session *cs, duart_channel channel,
     cs->channel = channel;
     cs->pending_rx = -1;
     cs->pending_tx = -1;
+    cs->closed = false;
     return 0;
 }
 
@@ -39,6 +40,10 @@ void comm_session_tick(comm_session *cs)
 {
     uint8_t byte;
     bool have = false;
+
+    /* A disconnect is permanent. Log it once, then stop polling. */
+    if (cs->closed)
+        return;
 
     /* DUART's send to session's send */
     if (cs->pending_rx >= 0) {
@@ -54,7 +59,8 @@ void comm_session_tick(comm_session *cs)
             break;
         case SESS_ERR:
             LOG_ERRORF("Failed to send byte: %s", strerror(errno));
-            break;
+            cs->closed = true;
+            return;
         case SESS_WOULD_BLOCK:
             cs->pending_rx = byte;
             break;
@@ -74,7 +80,8 @@ void comm_session_tick(comm_session *cs)
             break;
         case SESS_ERR:
             LOG_ERRORF("Failed to receive byte: %s", strerror(errno));
-            break;
+            cs->closed = true;
+            return;
         case SESS_WOULD_BLOCK:
             break;
         }
