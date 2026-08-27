@@ -20,6 +20,8 @@ void duart_init(duart *d, duart_pipe *pipe_a, duart_pipe *pipe_b,
                 duart_channel *host_a, duart_channel *host_b)
 {
     memset(d, 0, sizeof *d);
+    /* IP5 = Printer DSR, active low. Zero means attached. */
+    d->input_bits |= (1u << 5);
     duart_channel_pair(pipe_a, &d->a.channel, host_a);
     duart_channel_pair(pipe_b, &d->b.channel, host_b);
     d->reset_sleep = DUART_RESET_SLEEP;
