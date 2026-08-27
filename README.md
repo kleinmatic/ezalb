@@ -7,6 +7,21 @@ No frameworks, no build system beyond make.
 
 Ezalb is a rewrite of [blaze](https://github.com/mmastrac/blaze) in plain C.
 
+## Screenshots
+
+Power-on self-test finishing in the factory ROM:
+
+![VT420 OK power-on screen](screenshots/boot.png)
+
+Set-Up Directory (F3) — the firmware's own menus, not a reimplementation:
+
+![Set-Up Directory](screenshots/setup.png)
+
+[VT Raid](https://github.com/tenox7/vtraid) on comm1, drawn with DRCS soft
+fonts and the hardware scroll region:
+
+![VT Raid running on the emulated VT420](screenshots/vtraid.png)
+
 ## Features
 
 - Full VT420 hardware emulation: boots the factory ROM through self-test into
