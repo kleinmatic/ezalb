@@ -32,7 +32,8 @@ int comm_connect_session(comm_session *cs, duart_channel channel,
     cs->channel = channel;
     cs->pending_rx = -1;
     cs->pending_tx = -1;
-    cs->closed = false;
+    cs->tx_closed = false;
+    cs->rx_closed = false;
     return 0;
 }
 
@@ -41,12 +42,16 @@ void comm_session_tick(comm_session *cs)
     uint8_t byte;
     bool have = false;
 
-    /* A disconnect is permanent. Log it once, then stop polling. */
-    if (cs->closed)
-        return;
+    /* A disconnect is permanent: latch it, log once, stop polling that
+     * direction. The two directions are separate ssu_chans with separate
+     * pump threads and they die independently — `exec ... --no-pty` hands
+     * out two pipes, so a child can close stdin and keep writing stdout.
+     * One shared flag would let a dead write side silence a live read side. */
 
     /* DUART's send to session's send */
-    if (cs->pending_rx >= 0) {
+    if (cs->tx_closed) {
+        have = false;
+    } else if (cs->pending_rx >= 0) {
         byte = (uint8_t)cs->pending_rx;
         cs->pending_rx = -1;
         have = true;
@@ -59,8 +64,8 @@ void comm_session_tick(comm_session *cs)
             break;
         case SESS_ERR:
             LOG_ERRORF("Failed to send byte: %s", strerror(errno));
-            cs->closed = true;
-            return;
+            cs->tx_closed = true;
+            break;
         case SESS_WOULD_BLOCK:
             cs->pending_rx = byte;
             break;
@@ -73,15 +78,15 @@ void comm_session_tick(comm_session *cs)
         byte = (uint8_t)cs->pending_tx;
         cs->pending_tx = -1;
         have = true;
-    } else {
+    } else if (!cs->rx_closed) {
         switch (cs->session.recv(cs->session.recv_self, &byte)) {
         case SESS_OK:
             have = true;
             break;
         case SESS_ERR:
             LOG_ERRORF("Failed to receive byte: %s", strerror(errno));
-            cs->closed = true;
-            return;
+            cs->rx_closed = true;
+            break;
         case SESS_WOULD_BLOCK:
             break;
         }
