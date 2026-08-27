@@ -37,6 +37,17 @@ int comm_connect_session(comm_session *cs, duart_channel channel,
     return 0;
 }
 
+/* An ordinary far-end close arrives as an error code. EPIPE is the reader
+ * thread's EOF synthesis (ssu/session.c); ENOTCONN means the channel is
+ * gone; EIO is what a pty master read returns on Linux once the child has
+ * exited, i.e. every `exec` session that ends normally. Since the latch
+ * makes this the only line anyone sees, it should read as a disconnect
+ * notice. A real I/O failure keeps its ERROR. */
+static bool is_disconnect(int err)
+{
+    return err == EPIPE || err == SSU_ENOTCONN || err == EIO;
+}
+
 void comm_session_tick(comm_session *cs)
 {
     uint8_t byte;
@@ -63,7 +74,10 @@ void comm_session_tick(comm_session *cs)
         case SESS_OK:
             break;
         case SESS_ERR:
-            LOG_ERRORF("Failed to send byte: %s", strerror(errno));
+            if (is_disconnect(errno))
+                LOG_INFOF("Session send side disconnected: %s", strerror(errno));
+            else
+                LOG_ERRORF("Failed to send byte: %s", strerror(errno));
             cs->tx_closed = true;
             break;
         case SESS_WOULD_BLOCK:
@@ -84,7 +98,10 @@ void comm_session_tick(comm_session *cs)
             have = true;
             break;
         case SESS_ERR:
-            LOG_ERRORF("Failed to receive byte: %s", strerror(errno));
+            if (is_disconnect(errno))
+                LOG_INFOF("Session receive side disconnected: %s", strerror(errno));
+            else
+                LOG_ERRORF("Failed to receive byte: %s", strerror(errno));
             cs->rx_closed = true;
             break;
         case SESS_WOULD_BLOCK:
