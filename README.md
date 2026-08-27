@@ -17,10 +17,11 @@ Set-Up Directory (F3) — the firmware's own menus, not a reimplementation:
 
 ![Set-Up Directory](screenshots/setup.png)
 
-[VT Raid](https://github.com/tenox7/vtraid) on comm1, drawn with DRCS soft
-fonts and the hardware scroll region:
+[VT Raid](https://github.com/tenox7/vtraid) attract mode on comm1, drawn with
+DRCS soft fonts and the hardware scroll region, recorded with the MCP `video`
+tool:
 
-![VT Raid running on the emulated VT420](screenshots/vtraid.png)
+![VT Raid running on the emulated VT420](screenshots/vtraid.gif)
 
 ## Features
 
