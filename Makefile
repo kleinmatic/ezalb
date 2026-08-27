@@ -17,10 +17,10 @@ OBJS = common.o \
        ssu/chan.o ssu/session.o ssu/xonoff.o ssu/config.o \
        host/comm.o host/logging.o host/unicode.o host/headless.o \
        host/fb_render.o host/sdl.o host/text.o host/termkey.o \
-       host/ctl.o host/mcp.o host/json.o host/png.o
+       host/ctl.o host/mcp.o host/json.o host/png.o host/gif.o
 
 HDRS = common.h i8051/i8051.h machine/machine.h lk201/lk201.h ssu/ssu.h host/host.h \
-       host/ctl.h host/mcp.h host/json.h host/png.h
+       host/ctl.h host/mcp.h host/json.h host/png.h host/gif.h
 
 all: ezalb
 

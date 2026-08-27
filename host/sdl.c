@@ -5,6 +5,8 @@
 #include <SDL.h>
 #include <stdlib.h>
 
+#include "host/gif.h"
+
 void frame_policy_init(frame_policy *p)
 {
     uint64_t now = monotonic_ns();
@@ -153,7 +155,8 @@ static void handle_textinput(const SDL_TextInputEvent *te, lk201_sender sender)
     }
 }
 
-size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu)
+size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu,
+                           const char *record_path)
 {
     LOG_INFOF("Graphics: starting");
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -189,6 +192,13 @@ size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu)
     }
     LOG_INFOF("Graphics: window created");
     SDL_StartTextInput();
+
+    gif_writer *rec = record_path ? gif_open(record_path, FB_WIDTH, FB_HEIGHT) : NULL;
+    uint64_t rec_last_ns = monotonic_ns(), rec_next_ns = rec_last_ns;
+    if (record_path && !rec)
+        LOG_ERRORF("Recording: cannot create \"%s\"", record_path);
+    else if (rec)
+        LOG_INFOF("Recording to \"%s\"", record_path);
 
     lk201_sender sender = lk201_get_sender(&sys->keyboard);
     frame_policy policy;
@@ -236,6 +246,19 @@ size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu)
             }
         }
 
+        if (rec && monotonic_ns() >= rec_next_ns) {
+            uint64_t now = monotonic_ns();
+            uint64_t cs = (now - rec_last_ns) / REC_CS_NS;
+            if (cs < 2)
+                cs = 2; /* viewers clamp shorter delays to 10 cs */
+            else if (cs > 0xFFFF)
+                cs = 0xFFFF;
+            fb_render_frame(sys, frame);
+            gif_add_frame(rec, frame, (uint16_t)cs);
+            rec_last_ns = now;
+            rec_next_ns = now + REC_STEP_NS;
+        }
+
         idle_plan plan = frame_policy_plan_idle(&policy);
         if (plan.request_redraw)
             frame_policy_on_request_redraw(&policy); /* collapsed RedrawRequested round trip */
@@ -246,6 +269,15 @@ size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu)
             if (ms > 0)
                 SDL_WaitEventTimeout(NULL, (int)ms); /* event stays queued for next pass */
         }
+    }
+
+    if (rec) {
+        uint32_t nframes = 0;
+        long n = gif_close(rec, &nframes);
+        if (n < 0)
+            LOG_ERRORF("Recording: writing \"%s\" failed", record_path);
+        else
+            LOG_INFOF("Recording: %u frames, %ld bytes -> %s", nframes, n, record_path);
     }
 
     size_t count = sys->instruction_count;

@@ -8,6 +8,7 @@
 #include <strings.h>
 #include <time.h>
 
+#include "host/gif.h"
 #include "host/png.h"
 
 #define CTL_CHUNK          20000u   /* emu thread steps per lock hold */
@@ -656,16 +657,22 @@ int ctl_key(vt_ctl *c, const char *name, bool ctrl, bool shift, int count,
     return 0;
 }
 
-void ctl_wait_ms(vt_ctl *c, uint32_t ms)
+static void step_ms_locked(vt_ctl *c, pacer *p, uint32_t ms)
 {
     uint64_t total = (uint64_t)ms * CTL_STEPS_PER_MS;
+
+    for (uint64_t done = 0; done < total; done += CTL_POLL_CHUNK)
+        pace_steps(c, p, total - done < CTL_POLL_CHUNK ? total - done
+                                                       : CTL_POLL_CHUNK);
+}
+
+void ctl_wait_ms(vt_ctl *c, uint32_t ms)
+{
     pacer p;
 
     pthread_mutex_lock(&c->mu);
     pacer_init(&p, c);
-    for (uint64_t done = 0; done < total; done += CTL_POLL_CHUNK)
-        pace_steps(c, &p, total - done < CTL_POLL_CHUNK ? total - done
-                                                        : CTL_POLL_CHUNK);
+    step_ms_locked(c, &p, ms);
     pthread_mutex_unlock(&c->mu);
 }
 
@@ -715,6 +722,55 @@ int ctl_capture(vt_ctl *c, bool settle, uint32_t max_ms,
 
     *png = png_encode_rgb(rgb, FB_WIDTH, FB_HEIGHT, png_len);
     return *png ? 0 : -1;
+}
+
+int ctl_record(vt_ctl *c, const char *path, uint32_t duration_ms, uint32_t fps,
+               uint32_t *frames_out, long *bytes_out, char *err, size_t errlen)
+{
+    if (fps < 1)
+        fps = 1;
+    if (fps > CTL_REC_MAX_FPS)
+        fps = CTL_REC_MAX_FPS;
+
+    /* the frame interval is derived back from the rounded GIF delay, so
+     * playback runs at exactly the emulated speed */
+    uint16_t delay_cs = (uint16_t)((1000 / fps + 5) / 10);
+    if (delay_cs < 2)
+        delay_cs = 2; /* viewers clamp shorter delays to 10 cs */
+
+    uint32_t interval_ms = (uint32_t)delay_cs * 10;
+    uint32_t frames = duration_ms / interval_ms;
+    if (frames < 1)
+        frames = 1;
+
+    gif_writer *g = gif_open(path, FB_WIDTH, FB_HEIGHT);
+    if (!g) {
+        if (err)
+            snprintf(err, errlen, "cannot create \"%s\"", path);
+        return -1;
+    }
+
+    pacer p;
+    pthread_mutex_lock(&c->mu);
+    pacer_init(&p, c);
+    for (uint32_t i = 0; i < frames; i++) {
+        if (i > 0)
+            step_ms_locked(c, &p, interval_ms);
+        leave_refresh_locked(c);
+        fb_render_frame(c->sys, c->frame);
+        gif_add_frame(g, c->frame, delay_cs);
+    }
+    pthread_mutex_unlock(&c->mu);
+
+    long n = gif_close(g, frames_out);
+    if (n < 0) {
+        if (err)
+            snprintf(err, errlen, "writing \"%s\" failed", path);
+        return -1;
+    }
+    if (bytes_out)
+        *bytes_out = n;
+    return 0;
 }
 
 int ctl_reset(vt_ctl *c, char *err, size_t errlen)

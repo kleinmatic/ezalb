@@ -67,10 +67,23 @@ static const char TOOLS_JSON[] = "{\"tools\":["
     "{\"name\":\"record\","
     "\"description\":\"Capture a series of PNG frames at a fixed emulated-time "
     "interval — for blink, smooth scrolling, or animations. Returns all frames "
-    "as images.\","
+    "as images. Use video to save a recording to a file instead.\","
     "\"inputSchema\":{\"type\":\"object\",\"properties\":{"
     "\"frames\":{\"type\":\"number\",\"description\":\"frame count, 1-8 (default 4)\"},"
     "\"interval_ms\":{\"type\":\"number\",\"description\":\"emulated ms between frames (default 500)\"}}}},"
+
+    "{\"name\":\"video\","
+    "\"description\":\"Record the screen to an animated GIF file: a real "
+    "recording to keep or share (README demos, bug reports), unlike record "
+    "which returns a few frames inline for you to look at. duration_ms is "
+    "emulated time and plays back at that speed — the machine free-runs at "
+    "10x real time, so pace {speed:1} first when recording a program's "
+    "output, or it will trail the recording.\","
+    "\"inputSchema\":{\"type\":\"object\",\"properties\":{"
+    "\"path\":{\"type\":\"string\",\"description\":\"output file, e.g. screenshots/demo.gif\"},"
+    "\"duration_ms\":{\"type\":\"number\",\"description\":\"emulated ms to record (default 3000)\"},"
+    "\"fps\":{\"type\":\"number\",\"description\":\"frames per second, 1-50 (default 10)\"}},"
+    "\"required\":[\"path\"]}},"
 
     "{\"name\":\"reset\","
     "\"description\":\"Power-cycle the terminal: fresh boot with the same ROM, "
@@ -331,6 +344,29 @@ static void tool_record(const json_node *id, const json_node *args)
     json_buf_free(&b);
 }
 
+static void tool_video(const json_node *id, const json_node *args)
+{
+    const char *path = json_str_of(args, "path", NULL);
+    uint32_t frames = 0;
+    long bytes = 0;
+    char err[256], msg[512];
+
+    if (!path) {
+        reply_error(id, -32602, "video: missing \"path\"");
+        return;
+    }
+    uint32_t duration = (uint32_t)json_num_of(args, "duration_ms", 3000);
+    if (ctl_record(&g_ctl, path, duration, (uint32_t)json_num_of(args, "fps", 10),
+                   &frames, &bytes, err, sizeof err) != 0) {
+        reply_text(id, err, true);
+        return;
+    }
+    snprintf(msg, sizeof msg, "wrote %s: %u frames, %dx%d, %.1f KB, %.1fs of "
+             "emulated time", path, frames, FB_WIDTH, FB_HEIGHT,
+             (double)bytes / 1024.0, (double)duration / 1000.0);
+    reply_text(id, msg, false);
+}
+
 static void tool_reset(const json_node *id)
 {
     char err[256];
@@ -423,11 +459,11 @@ static void handle_initialize(const json_node *id, const json_node *params)
     jb_fmt(&i, "A real VT420 terminal (hardware emulation running DEC "
                "firmware) under your control. comm1: %s, comm2: %s. Typical "
                "flow: wait {for_text} for output, type {text ending in \\r}, "
-               "read_screen for text, screenshot for pixels. key {name: "
-               "\"setup\"} toggles Set-Up. Time runs at 10x real time between "
-               "calls; waits are in emulated ms. After reset or session, "
-               "always wait {for_text} for the program's prompt before "
-               "typing.", st.comm1, st.comm2);
+               "read_screen for text, screenshot for pixels, video for a GIF "
+               "recording. key {name: \"setup\"} toggles Set-Up. Time runs at "
+               "10x real time between calls; waits are in emulated ms. After "
+               "reset or session, always wait {for_text} for the program's "
+               "prompt before typing.", st.comm1, st.comm2);
     jb_str(&b, i.p);
     json_buf_free(&i);
     jb_raw(&b, "}");
@@ -477,6 +513,7 @@ static void handle_line(char *line)
         else if (strcmp(name, "key") == 0)         tool_key(id, args);
         else if (strcmp(name, "wait") == 0)        tool_wait(id, args);
         else if (strcmp(name, "record") == 0)      tool_record(id, args);
+        else if (strcmp(name, "video") == 0)       tool_video(id, args);
         else if (strcmp(name, "reset") == 0)       tool_reset(id);
         else if (strcmp(name, "session") == 0)     tool_session(id, args);
         else if (strcmp(name, "pace") == 0)        tool_pace(id, args);

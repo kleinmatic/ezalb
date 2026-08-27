@@ -91,8 +91,13 @@ void      frame_policy_on_request_redraw(frame_policy *p);
  * 800x416 resizable window (min 800x416), title FB_WINDOW_TITLE, streaming
  * RGBA texture stretched to the window; SDL_TEXTINPUT for chars +
  * SDL_KEYDOWN (repeat on) for specials — never double-send; frame pacing
- * per frame_policy. Returns instruction count, (size_t)-1 on init error. */
-size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu);
+ * per frame_policy. record_path, when set, writes the session to an animated
+ * GIF at REC_FPS. Returns instruction count, (size_t)-1 on init error. */
+#define REC_FPS     20ull
+#define REC_STEP_NS (1000000000ull / REC_FPS)
+#define REC_CS_NS   10000000ull /* a GIF delay unit (centisecond) in ns */
+size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu,
+                           const char *record_path);
 
 /* host/lk201/crossterm.rs -> terminal key input (termkey.c) */
 typedef enum kbd_command {

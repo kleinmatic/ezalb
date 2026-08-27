@@ -32,8 +32,10 @@ fonts and the hardware scroll region:
   a pipe/FIFO, or loopback
 - NVR (EEPROM) persistence to a file — Set-Up changes survive restarts
 - Three display modes: SDL2 window, ANSI TUI in your terminal, headless
+- Screen recording to animated GIF: `--record FILE.gif` in graphics mode, or
+  the MCP `video` tool
 - MCP server mode: AI agents (Claude Code) can run the terminal, type on the
-  LK201, and take screenshots
+  LK201, take screenshots and record video
 - VT510 / VT520 / VT525 ROMs boot headless (machine support is skeletal)
 
 ## Build
@@ -69,6 +71,10 @@ into a login shell on comm1 in graphics mode, with NVR in `~/.vt420.nvr`.
 # ANSI TUI in your terminal
 ./ezalb --rom roms/vt420/23-068E9-00.bin --display text --comm1 'exec /bin/sh'
 
+# Record the session to an animated GIF
+./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --comm1 'exec /bin/sh' \
+    --record demo.gif
+
 # Persist Set-Up settings
 ./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --nvr ~/.vt420.nvr
 
@@ -87,6 +93,7 @@ fast-forwards it.
 --display MODE        headless (default) | text | graphics
 --comm1 / --comm2 CFG serial session: loopback | pipe PATH |
                       exec CMD [--no-pty] [--rows N] [--cols N]
+--record FILE         record the display to an animated GIF (graphics mode)
 --machine TYPE        vt420 (default) | vt52x | vt510
 --mcp                 run as an MCP server on stdio (see below)
 --benchmark           run 100M instructions and report speed
@@ -116,16 +123,18 @@ claude mcp add vt420 -- /path/to/ezalb --mcp \
 ```
 
 Tools: `read_screen` (text, with optional attribute annotations),
-`screenshot` (pixel-exact 800x416 PNG), `type` / `key` (LK201 input, paced
+`screenshot` (pixel-exact 800x416 PNG), `video` (animated GIF of N
+emulated ms written to a file), `type` / `key` (LK201 input, paced
 like human typing — the firmware drops faster keystrokes), `wait`
 (expect-style: block until text appears on screen), `record` (frame series:
 blink, smooth scroll), `session` (swap comm1/comm2 to a new `exec ...` at
 runtime), `reset` (power-cycle), `pace` (speed / deterministic pause),
 `status`.
 
-The machine free-runs at 10x real time; waits are in emulated ms. Serial-line
-realities apply: after `reset` or `session`, `wait` for the program's prompt
-before typing, or the pty will flush your input.
+The machine free-runs at 10x real time; waits and `video` durations are in
+emulated ms, so use `pace {speed:1}` when recording a program's output.
+Serial-line realities apply: after `reset` or `session`, `wait` for the
+program's prompt before typing, or the pty will flush your input.
 
 ## ROMs
 

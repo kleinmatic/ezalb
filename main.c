@@ -31,6 +31,7 @@ typedef struct cli_args {
     bool           display_set;
     session_config comm1, comm2;
     const char    *comm1_str, *comm2_str; /* raw argv values (for --mcp) */
+    const char    *record_path;
     bool           comm1_set, comm2_set;
     bool           show_vram, show_mapper;
     bool           log_enable, verbose, benchmark, skip_diagnostics, mcp;
@@ -48,6 +49,7 @@ static const char USAGE[] =
     "      --display <MODE>     Display the video output [possible values: headless, text, graphics]\n"
     "      --comm1 <SESSION>    Comm1 session configuration\n"
     "      --comm2 <SESSION>    Comm2 session configuration\n"
+    "      --record <PATH>      Record the display to an animated GIF (requires --display graphics)\n"
     "      --show-vram          Display the video RAM (requires --display)\n"
     "      --show-mapper        Display the mapper (requires --display)\n"
     "      --log                Enable logging\n"
@@ -190,6 +192,12 @@ static int parse_args(int argc, char **argv, cli_args *a)
             a->rom_path = v;
             continue;
         }
+        if ((r = flag_value(argc, argv, &i, "--record", &v)) != 0) {
+            if (r < 0)
+                return -1;
+            a->record_path = v;
+            continue;
+        }
         if ((r = flag_value(argc, argv, &i, "--nvr", &v)) != 0) {
             if (r < 0)
                 return -1;
@@ -262,6 +270,10 @@ static int parse_args(int argc, char **argv, cli_args *a)
     }
     if (a->display_set && a->benchmark) {
         fprintf(stderr, "error: '--display' cannot be used with '--benchmark'\n");
+        return -1;
+    }
+    if (a->record_path && a->display != DISPLAY_GRAPHICS) {
+        fprintf(stderr, "error: '--record' requires '--display graphics'\n");
         return -1;
     }
     if ((a->show_vram || a->show_mapper) && !a->display_set) {
@@ -367,7 +379,7 @@ static int run_vt420(const cli_args *args)
     } else if (args->display == DISPLAY_TEXT) {
         count = screen_text_run(sys, &cpu, args->show_mapper, args->show_vram);
     } else {
-        count = screen_graphics_run(sys, &cpu);
+        count = screen_graphics_run(sys, &cpu, args->record_path);
         if (count == (size_t)-1) {
             vt420_system_free(sys);
             free(sys);

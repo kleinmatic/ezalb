@@ -7,7 +7,8 @@ set -e
 BIN=${1:-./ezalb}
 ROM=${2:-roms/vt420/23-068E9-00.bin}
 OUT=$(mktemp)
-trap 'rm -f "$OUT"' EXIT
+GIF="$OUT.gif"
+trap 'rm -f "$OUT" "$GIF"' EXIT
 
 {
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"mcp-test","version":"0"}}}'
@@ -17,8 +18,9 @@ trap 'rm -f "$OUT"' EXIT
   echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"type","arguments":{"text":"echo MCP-SMOKE-$(echo OK)\r"}}}'
   echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"wait","arguments":{"for_text":"MCP-SMOKE-OK","timeout_ms":60000}}}'
   echo '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"screenshot","arguments":{}}}'
-  echo '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"status","arguments":{}}}'
-  echo '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"nosuch","arguments":{}}}'
+  echo '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"video","arguments":{"path":"'"$GIF"'","duration_ms":500,"fps":10}}}'
+  echo '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"status","arguments":{}}}'
+  echo '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"nosuch","arguments":{}}}'
 } | "$BIN" --mcp --rom "$ROM" --skip-diagnostics --comm1 'exec /bin/sh' > "$OUT" 2>/dev/null
 
 check() {
@@ -32,6 +34,11 @@ check '"protocolVersion"'                  "initialize response"
 check '"name":"screenshot"'                "tools/list entry"
 check '"text":"matched'                    "wait for_text match"
 check '"type":"image","data":"iVBORw0KGgo' "PNG screenshot"
+check '"text":"wrote'                      "video tool wrote a file"
+if [ "$(head -c 6 "$GIF")" != "GIF89a" ]; then
+    echo "FAIL: video did not produce a GIF"
+    exit 1
+fi
 check '\\"columns\\":80'                   "status columns"
 check '"code":-32602'                      "unknown-tool error"
 if grep -q 'MCP-SMOKE-OK' "$OUT" && sed -n '5p' "$OUT" | grep -q '"text":"matched'; then

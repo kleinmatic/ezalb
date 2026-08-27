@@ -12,6 +12,7 @@
 /* 1 step = 1 pixel clock: Htot 32 x Vtot 625 x 60 Hz ~= 1.2M steps/s. */
 #define CTL_STEPS_PER_MS 1200u
 #define CTL_SCREEN_CAP   131072u
+#define CTL_REC_MAX_FPS  50u   /* GIF delays are centiseconds */
 
 typedef struct ctl_status_info {
     size_t   instruction_count;
@@ -84,6 +85,12 @@ bool ctl_wait_text(vt_ctl *c, const char *needle, uint32_t timeout_ms);
 /* Renders the framebuffer to a malloc'd PNG. settle first when asked. */
 int  ctl_capture(vt_ctl *c, bool settle, uint32_t max_ms,
                  uint8_t **png, size_t *png_len);
+
+/* Records duration_ms of emulated time to an animated GIF at path, fps
+ * frames per second (1..CTL_REC_MAX_FPS). Playback runs at emulated speed.
+ * frames_out/bytes_out, when given, receive what was written. */
+int  ctl_record(vt_ctl *c, const char *path, uint32_t duration_ms, uint32_t fps,
+                uint32_t *frames_out, long *bytes_out, char *err, size_t errlen);
 
 /* Power-cycle: same ROM/NVR/session configs, fresh machine + CPU. */
 int  ctl_reset(vt_ctl *c, char *err, size_t errlen);
