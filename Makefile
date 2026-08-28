@@ -134,7 +134,7 @@ release: app
 # ---- Linux packages (built via docker, output to dist/) ----
 
 DOCKER  ?= docker
-VERSION ?= 1.0
+VERSION ?= 1.1
 HOSTARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 
 deb: deb-$(HOSTARCH)
