@@ -114,6 +114,9 @@ fast-forwards it.
 -v                    verbose logging
 ```
 
+`exec` sessions run with `TERM=vt420` (vt220/vt100 if that terminfo entry is
+not installed) and without the launching terminal's identity variables.
+
 Keys: F1–F20 map to the LK201 (F3 = Set-Up, F4 = switch session), arrows,
 Home/End/PgUp/PgDn = Find/Select/Prev/Next Screen, Backspace = Delete.
 Text mode is commanded via Ctrl+G: `q` quit, space pause, `1`–`5` = F1–F5,

@@ -123,17 +123,25 @@ static void list_roms(FILE *f)
                 builtin_roms[i].desc, builtin_roms[i].part);
 }
 
+/* login(1) convention: the passwd entry wins, then $SHELL, then /bin/sh.
+ * nologin/false accounts and stale entries fall through. */
+static bool usable_shell(const char *s)
+{
+    if (!s || s[0] != '/' || access(s, X_OK) != 0)
+        return false;
+    const char *base = strrchr(s, '/') + 1;
+    return strcmp(base, "nologin") != 0 && strcmp(base, "false") != 0;
+}
+
 /* Launched with no arguments (a bare `ezalb`, Finder, .desktop): graphical
  * display, a login shell on comm1 and NVR persistence in $HOME. */
 static bool app_defaults(cli_args *a)
 {
     static char nvr[PATH_MAX + 32], comm1[PATH_MAX + 48];
     struct passwd *pw = getpwuid(getuid());
-    const char *fallback = "/bin/sh";
-#ifdef __APPLE__
-    fallback = "/bin/zsh";
-#endif
-    const char *shell = (pw && pw->pw_shell && pw->pw_shell[0]) ? pw->pw_shell : fallback;
+    const char *shell = pw && usable_shell(pw->pw_shell) ? pw->pw_shell
+                      : usable_shell(getenv("SHELL"))   ? getenv("SHELL")
+                                                        : "/bin/sh";
     const char *home = getenv("HOME");
     if (!home && pw)
         home = pw->pw_dir;

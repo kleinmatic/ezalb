@@ -11,12 +11,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "common.h"
 
 extern char **environ;
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 void ssu_global_init(void)
 {
@@ -217,6 +223,48 @@ static int open_pipes(const char *rx, const char *tx, int *rfd, int *wfd)
     return 0;
 }
 
+/* The child talks to the emulated VT420: TERM=vt420 if that entry exists,
+ * else the closest ancestor that does — vt420 ships in ncurses-term and is
+ * missing on stock Ubuntu/Fedora, where curses apps would refuse to start.
+ * No terminfo database at all (termcap-only BSDs): keep vt420. */
+static bool terminfo_has(const char *dir, const char *name)
+{
+    char p[PATH_MAX];
+    struct stat st;
+
+    snprintf(p, sizeof p, "%s/%c/%s", dir, name[0], name);
+    if (stat(p, &st) == 0)
+        return true;
+    snprintf(p, sizeof p, "%s/%02x/%s", dir, (unsigned)(unsigned char)name[0], name);
+    return stat(p, &st) == 0; /* macOS/ncurses hex directories */
+}
+
+static const char *child_term(void)
+{
+    static const char *const names[] = { "vt420", "vt220", "vt100" };
+    const char *dirs[8], *env = getenv("TERMINFO"), *home = getenv("HOME");
+    char home_db[PATH_MAX];
+    size_t n = 0;
+
+    if (env && *env)
+        dirs[n++] = env;
+    if (home) {
+        snprintf(home_db, sizeof home_db, "%s/.terminfo", home);
+        dirs[n++] = home_db;
+    }
+    dirs[n++] = "/etc/terminfo";
+    dirs[n++] = "/lib/terminfo";
+    dirs[n++] = "/usr/share/terminfo";
+    dirs[n++] = "/usr/local/share/terminfo";
+    dirs[n++] = "/usr/share/lib/terminfo";
+
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; i++)
+        for (size_t d = 0; d < n; d++)
+            if (terminfo_has(dirs[d], names[i]))
+                return names[i];
+    return "vt420";
+}
+
 /* The child talks to the emulated VT420, not to whatever terminal launched
  * us: hand it TERM=vt420 and drop the host terminal's identity. Sharing
  * TERM_SESSION_ID with Apple Terminal makes two login bashes write the same
@@ -230,11 +278,13 @@ static char **child_env(void)
         "COLORTERM", "LINES", "COLUMNS",
     };
     size_t n = 0, k = 0;
-    char **env;
+    char **env, *term;
 
     while (environ[n]) n++;
-    if (!(env = malloc((n + 2) * sizeof *env)))
+    if (!(env = malloc((n + 2) * sizeof *env + 32)))
         return NULL;
+    term = (char *)(env + n + 2); /* the TERM= string rides along in the block */
+    snprintf(term, 32, "TERM=%s", child_term());
     for (size_t i = 0; i < n; i++) {
         bool skip = false;
         for (size_t d = 0; d < sizeof drop / sizeof drop[0] && !skip; d++) {
@@ -244,7 +294,7 @@ static char **child_env(void)
         if (!skip)
             env[k++] = environ[i];
     }
-    env[k++] = (char *)"TERM=vt420";
+    env[k++] = term;
     env[k] = NULL;
     return env;
 }
