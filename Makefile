@@ -17,10 +17,17 @@ OBJS = common.o \
        ssu/chan.o ssu/session.o ssu/xonoff.o ssu/config.o ssu/serial.o \
        host/comm.o host/logging.o host/unicode.o host/headless.o \
        host/fb_render.o host/sdl.o host/text.o host/termkey.o \
-       host/ctl.o host/mcp.o host/json.o host/png.o host/gif.o
+       host/ctl.o host/mcp.o host/json.o host/png.o host/gif.o \
+       host/roms.o host/roms_blob.o
 
 HDRS = common.h i8051/i8051.h machine/machine.h lk201/lk201.h ssu/ssu.h host/host.h \
        host/ctl.h host/mcp.h host/json.h host/png.h host/gif.h
+
+# Firmware ROMs: gzipped here, .incbin-ed into host/roms_blob.o.
+BUILD = build
+ROMZ = $(BUILD)/roms/vt420/23-068E9-00.z $(BUILD)/roms/vt420/23-208E9-00.z \
+       $(BUILD)/roms/vt420/2E-C394A-01.z $(BUILD)/roms/vt510/23-032ED-00.z \
+       $(BUILD)/roms/vt520/23-010ED-00.z $(BUILD)/roms/vt525/23-011ED-00.z
 
 all: ezalb
 
@@ -37,15 +44,24 @@ comm_test: $(OBJS) tests/comm_test.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
 test: boot_test comm_test serial_test
-	./boot_test roms/vt420/23-068E9-00.bin
+	./boot_test
 	./comm_test
 	./serial_test
 
 mcp_test: ezalb
-	tests/mcp_test.sh ./ezalb roms/vt420/23-068E9-00.bin
+	tests/mcp_test.sh ./ezalb
 
 %.o: %.c $(HDRS)
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+%.o: %.S
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+host/roms_blob.o: $(ROMZ)
+
+$(BUILD)/roms/%.z: roms/%.bin
+	@mkdir -p $(@D)
+	gzip -9c $< > $@
 
 clean:
 	rm -f $(OBJS) main.o tests/boot_test.o tests/comm_test.o tests/serial_test.o \
@@ -54,11 +70,9 @@ clean:
 
 # ---- macOS app bundle / dmg / notarized release ----
 
-BUILD   = build
 APP     = $(BUILD)/Ezalb.app
 DMG     = $(BUILD)/Ezalb.dmg
 STAGING = $(BUILD)/dmg_staging
-ROM     = roms/vt420/23-068E9-00.bin
 
 icon: $(BUILD)/AppIcon.icns
 
@@ -70,11 +84,10 @@ $(BUILD)/AppIcon.icns: macos/gen_icon.swift
 # @loader_path/libSDL3.dylib) so the app runs without Homebrew.
 app: ezalb $(BUILD)/AppIcon.icns
 	@rm -rf $(APP)
-	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Frameworks $(APP)/Contents/Resources/roms/vt420
+	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Frameworks $(APP)/Contents/Resources
 	cp ezalb $(APP)/Contents/MacOS/
 	cp macos/Info.plist $(APP)/Contents/
 	cp $(BUILD)/AppIcon.icns $(APP)/Contents/Resources/
-	cp $(ROM) $(APP)/Contents/Resources/roms/vt420/
 	SDL2=$$(otool -L ezalb | awk '/libSDL2/{print $$1; exit}'); \
 	cp "$$SDL2" $(APP)/Contents/Frameworks/libSDL2-2.0.0.dylib; \
 	chmod 644 $(APP)/Contents/Frameworks/libSDL2-2.0.0.dylib; \

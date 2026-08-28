@@ -149,4 +149,20 @@ kbd_command term_keyboard_update(term_keyboard *kb, const term_key_event *ev,
 size_t screen_text_run(vt420_system *sys, i8051_cpu *cpu,
                        bool show_mapper, bool show_vram);
 
+/* roms.c — firmware ROMs gzipped into the binary at build time (roms.S). */
+typedef struct builtin_rom {
+    const char *name; /* --rom name */
+    const char *part; /* DEC part number */
+    const char *desc;
+    const uint8_t *z, *z_end; /* gzip blob */
+} builtin_rom;
+
+extern const builtin_rom builtin_roms[];
+extern const size_t      builtin_roms_count;
+
+/* Name or part number, case-insensitive. NULL if unknown. */
+const builtin_rom *builtin_rom_find(const char *name);
+/* Inflates into a malloc'd buffer the caller frees. NULL on failure. */
+uint8_t *builtin_rom_load(const builtin_rom *r, size_t *out_len);
+
 #endif

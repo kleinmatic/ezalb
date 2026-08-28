@@ -85,12 +85,13 @@ static uint8_t *read_file(const char *path, size_t *out_len)
 
 int main(int argc, char **argv)
 {
-    const char *rom_path = argc > 1 ? argv[1] : "roms/vt420/23-068E9-00.bin";
+    const char *rom_path = argc > 1 ? argv[1] : NULL;
     size_t rom_len = 0;
-    uint8_t *rom = read_file(rom_path, &rom_len);
+    uint8_t *rom = rom_path ? read_file(rom_path, &rom_len)
+                            : builtin_rom_load(builtin_rom_find("vt420"), &rom_len);
 
     if (!rom) {
-        fprintf(stderr, "FAIL: cannot read ROM file: %s\n", rom_path);
+        fprintf(stderr, "FAIL: cannot read ROM: %s\n", rom_path ? rom_path : "built-in vt420");
         return 1;
     }
     if (vt420_system_new(&boot_sys, rom, (uint32_t)rom_len, NULL, NULL, NULL) != 0) {

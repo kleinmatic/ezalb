@@ -5,7 +5,7 @@
 set -e
 
 BIN=${1:-./ezalb}
-ROM=${2:-roms/vt420/23-068E9-00.bin}
+ROM=${2:-vt420}
 OUT=$(mktemp)
 GIF="$OUT.gif"
 trap 'rm -f "$OUT" "$GIF"' EXIT

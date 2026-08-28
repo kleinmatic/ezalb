@@ -55,38 +55,41 @@ make mcp_test   # MCP smoke test: boots, types into a shell, screenshots
 ## Packages
 
 ```
-make app        # macOS Ezalb.app (bundled ROM + SDL, double-click = shell)
+make app        # macOS Ezalb.app (bundles SDL, double-click = shell)
 make dmg        # build/Ezalb.dmg
 make release    # signed + notarized dmg (DEV_ID/NOTARY_PROFILE in .env)
 make deb rpm    # Linux packages via docker, output in dist/
                 # cross-arch: deb-amd64 deb-arm64 rpm-amd64 rpm-arm64
 ```
 
-Installed apps launched with no arguments (Finder / .desktop) boot straight
+Launched with no arguments (bare `ezalb`, Finder, .desktop) it boots straight
 into a login shell on comm1 in graphics mode, with NVR in `~/.vt420.nvr`.
 
 ## Quick start
 
 ```
+# Login shell in a VT420 window
+./ezalb
+
 # Graphical display, shell on comm1
-./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --comm1 'exec /bin/sh'
+./ezalb --display graphics --comm1 'exec /bin/sh'
 
 # ANSI TUI in your terminal
-./ezalb --rom roms/vt420/23-068E9-00.bin --display text --comm1 'exec /bin/sh'
+./ezalb --display text --comm1 'exec /bin/sh'
 
 # Record the session to an animated GIF
-./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --comm1 'exec /bin/sh' \
+./ezalb --display graphics --comm1 'exec /bin/sh' \
     --record demo.gif
 
 # Talk to a real serial port, minicom style
-./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics \
+./ezalb --display graphics \
     --comm1 'serial /dev/cu.usbserial-1410'
 
 # Persist Set-Up settings
-./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --nvr ~/.vt420.nvr
+./ezalb --display graphics --nvr ~/.vt420.nvr
 
 # Benchmark the CPU core
-./ezalb --rom roms/vt420/23-068E9-00.bin --benchmark
+./ezalb --benchmark
 ```
 
 Boot runs a couple of seconds of firmware self-test; `--skip-diagnostics`
@@ -95,7 +98,8 @@ fast-forwards it.
 ## Usage
 
 ```
---rom FILE            ROM image (required)
+--rom NAME|FILE       built-in ROM (default: per --machine) or ROM file
+--list-roms           list the built-in ROMs
 --nvr FILE            NVR EEPROM file (created if missing)
 --display MODE        headless (default) | text | graphics
 --comm1 / --comm2 CFG serial session: loopback | pipe PATH | serial PATH |
@@ -121,7 +125,7 @@ Text mode is commanded via Ctrl+G: `q` quit, space pause, `1`–`5` = F1–F5,
 `/dev/ttyUSB*` or `/dev/ttyS*` on Linux, `/dev/cuaU*` on the BSDs.
 
 ```
-./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics \
+./ezalb --display graphics \
     --comm1 'serial /dev/cu.usbserial-1410'
 ```
 
@@ -139,8 +143,7 @@ serial ports, type on the LK201, watch the screen. This repo ships a
 `.mcp.json` that starts it with a shell on comm1; for your own project:
 
 ```
-claude mcp add vt420 -- /path/to/ezalb --mcp \
-    --rom /path/to/roms/vt420/23-068E9-00.bin --skip-diagnostics \
+claude mcp add vt420 -- /path/to/ezalb --mcp --skip-diagnostics \
     --nvr ~/.vt420.nvr --comm1 'exec /bin/sh'
 ```
 
@@ -160,8 +163,10 @@ program's prompt before typing, or the pty will flush your input.
 
 ## ROMs
 
-Original DEC firmware images are in `roms/` (VT420, VT510, VT520, VT525) along
-with hardware documentation in `architecture/` and `datasheets/`.
+The firmware images (VT420 V1.3/V1.4/B1.4, VT510, VT520, VT525) are gzipped
+into the binary at build time, so no ROM file is needed — `--list-roms` shows
+the names, `--rom` also takes a path to an external image. The originals are in
+`roms/`, with hardware documentation in `architecture/` and `datasheets/`.
 
 ## License
 

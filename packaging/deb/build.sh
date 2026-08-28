@@ -14,11 +14,10 @@ rm -f ezalb boot_test
 make ezalb
 
 rm -rf "$PKG"
-mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/ezalb/roms/vt420" \
+mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" \
          "$PKG/usr/share/applications" "$PKG/usr/share/icons/hicolor/256x256/apps" \
          "$PKG/usr/share/doc/ezalb"
 install -m 755 ezalb "$PKG/usr/bin/ezalb"
-install -m 644 roms/vt420/23-068E9-00.bin "$PKG/usr/share/ezalb/roms/vt420/"
 install -m 644 packaging/shared/ezalb.desktop "$PKG/usr/share/applications/"
 install -m 644 packaging/shared/ezalb.png "$PKG/usr/share/icons/hicolor/256x256/apps/"
 install -m 644 README.md LICENSE.md "$PKG/usr/share/doc/ezalb/"

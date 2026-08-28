@@ -11,9 +11,6 @@
 #include <limits.h>
 #include <pwd.h>
 #include <sys/types.h>
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#endif
 #endif
 
 typedef enum display_mode {
@@ -25,7 +22,7 @@ typedef enum machine_type {
 } machine_type;
 
 typedef struct cli_args {
-    const char    *rom_path;
+    const char    *rom; /* built-in name or file path */
     const char    *nvr_path;
     display_mode   display; /* HEADLESS unless display_set */
     bool           display_set;
@@ -41,10 +38,11 @@ typedef struct cli_args {
 static const char USAGE[] =
     "A VT420 terminal emulator using 8051 CPU emulation\n"
     "\n"
-    "Usage: ezalb [OPTIONS] --rom <PATH>\n"
+    "Usage: ezalb [OPTIONS]\n"
     "\n"
     "Options:\n"
-    "      --rom <PATH>         Path to the ROM file\n"
+    "      --rom <NAME|PATH>    Built-in ROM name or ROM file [default: per --machine]\n"
+    "      --list-roms          List the built-in ROMs\n"
     "      --nvr <PATH>         Path to the non-volatile RAM file\n"
     "      --display <MODE>     Display the video output [possible values: headless, text, graphics]\n"
     "      --comm1 <SESSION>    Comm1 session configuration\n"
@@ -106,41 +104,29 @@ static int parse_machine(const char *s, machine_type *out)
     return -1;
 }
 
+static const char *default_rom(machine_type m)
+{
+    switch (m) {
+    case MACHINE_VT52X: return "vt520";
+    case MACHINE_VT510: return "vt510";
+    default:            return "vt420";
+    }
+}
+
+static void list_roms(FILE *f)
+{
+    fprintf(f, "Built-in ROMs (--rom):\n");
+    for (size_t i = 0; i < builtin_roms_count; i++)
+        fprintf(f, "  %-11s %-12s %s\n", builtin_roms[i].name,
+                builtin_roms[i].desc, builtin_roms[i].part);
+}
+
 #if defined(__APPLE__) || defined(__linux__)
-/* Launched with no arguments from an installed app (Finder / .desktop): if a
- * ROM is found relative to the executable (mac: Contents/Resources, linux:
- * ../share/ezalb or /usr/share/ezalb), default to the graphical display with
- * a login shell on comm1 and NVR persistence in $HOME. */
+/* Launched with no arguments (a bare `ezalb`, Finder, .desktop): graphical
+ * display, a login shell on comm1 and NVR persistence in $HOME. */
 static bool app_defaults(cli_args *a)
 {
-    static char rom[PATH_MAX + 64], nvr[PATH_MAX + 32], comm1[PATH_MAX + 48];
-    char real[PATH_MAX];
-    char *slash;
-
-#ifdef __APPLE__
-    char exe[PATH_MAX];
-    uint32_t n = sizeof exe;
-    if (_NSGetExecutablePath(exe, &n) != 0 || !realpath(exe, real))
-        return false;
-#else
-    ssize_t len = readlink("/proc/self/exe", real, sizeof real - 1);
-    if (len <= 0)
-        return false;
-    real[len] = '\0';
-#endif
-    if (!(slash = strrchr(real, '/')))
-        return false;
-    *slash = '\0';
-#ifdef __APPLE__
-    snprintf(rom, sizeof rom, "%s/../Resources/roms/vt420/23-068E9-00.bin", real);
-#else
-    snprintf(rom, sizeof rom, "%s/../share/ezalb/roms/vt420/23-068E9-00.bin", real);
-    if (access(rom, R_OK) != 0)
-        snprintf(rom, sizeof rom, "/usr/share/ezalb/roms/vt420/23-068E9-00.bin");
-#endif
-    if (access(rom, R_OK) != 0)
-        return false;
-
+    static char nvr[PATH_MAX + 32], comm1[PATH_MAX + 48];
     struct passwd *pw = getpwuid(getuid());
     const char *fallback = "/bin/sh";
 #ifdef __APPLE__
@@ -156,7 +142,6 @@ static bool app_defaults(cli_args *a)
         return false;
     a->comm1_set = true;
     a->comm1_str = comm1;
-    a->rom_path = rom;
     a->display = DISPLAY_GRAPHICS;
     a->display_set = true;
     if (home) {
@@ -174,8 +159,10 @@ static int parse_args(int argc, char **argv, cli_args *a)
     memset(a, 0, sizeof *a);
 #if defined(__APPLE__) || defined(__linux__)
     if ((argc == 1 || (argc == 2 && strncmp(argv[1], "-psn", 4) == 0)) &&
-        app_defaults(a))
+        app_defaults(a)) {
+        a->rom = default_rom(a->machine);
         return 0;
+    }
 #endif
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -190,6 +177,10 @@ static int parse_args(int argc, char **argv, cli_args *a)
         if (strcmp(arg, "--benchmark") == 0)        { a->benchmark = true; continue; }
         if (strcmp(arg, "--skip-diagnostics") == 0) { a->skip_diagnostics = true; continue; }
         if (strcmp(arg, "--mcp") == 0)              { a->mcp = true; continue; }
+        if (strcmp(arg, "--list-roms") == 0) {
+            list_roms(stdout);
+            exit(0);
+        }
         if (strcmp(arg, "--log") == 0)              { a->log_enable = true; continue; }
         if (strcmp(arg, "--show-vram") == 0)        { a->show_vram = true; continue; }
         if (strcmp(arg, "--show-mapper") == 0)      { a->show_mapper = true; continue; }
@@ -197,7 +188,7 @@ static int parse_args(int argc, char **argv, cli_args *a)
         if ((r = flag_value(argc, argv, &i, "--rom", &v)) != 0) {
             if (r < 0)
                 return -1;
-            a->rom_path = v;
+            a->rom = v;
             continue;
         }
         if ((r = flag_value(argc, argv, &i, "--record", &v)) != 0) {
@@ -271,9 +262,11 @@ static int parse_args(int argc, char **argv, cli_args *a)
         return -1;
     }
 
-    if (!a->rom_path) {
-        fprintf(stderr, "error: the required argument '--rom <PATH>' was not provided\n"
-                        "For more information, try '--help'.\n");
+    if (!a->rom)
+        a->rom = default_rom(a->machine);
+    else if (!builtin_rom_find(a->rom) && access(a->rom, R_OK) != 0) {
+        fprintf(stderr, "error: no ROM file or built-in ROM named '%s'\n", a->rom);
+        list_roms(stderr);
         return -1;
     }
     if (a->display_set && a->benchmark) {
@@ -326,18 +319,22 @@ static uint8_t *read_file(const char *path, size_t *out_len)
     return buf;
 }
 
-static uint8_t *load_rom(const char *path, size_t *out_len)
+static uint8_t *load_rom(const char *name, size_t *out_len)
 {
+    const builtin_rom *b = builtin_rom_find(name);
     uint8_t *rom;
 
-    LOG_INFOF("Loading ROM file: \"%s\"...", path);
-    if (access(path, F_OK) != 0) {
-        LOG_INFOF("Error: ROM file does not exist: \"%s\"", path);
-        exit(1);
+    if (b) {
+        LOG_INFOF("Loading built-in ROM: %s (%s)...", b->desc, b->part);
+        rom = builtin_rom_load(b, out_len);
+        if (!rom)
+            LOG_ERRORF("Failed to inflate built-in ROM: \"%s\"", b->name);
+        return rom;
     }
-    rom = read_file(path, out_len);
+    LOG_INFOF("Loading ROM file: \"%s\"...", name);
+    rom = read_file(name, out_len);
     if (!rom)
-        LOG_ERRORF("Failed to read ROM file: \"%s\"", path);
+        LOG_ERRORF("Failed to read ROM file: \"%s\"", name);
     return rom;
 }
 
@@ -346,7 +343,7 @@ static int run_vt420(const cli_args *args)
     LOG_INFOF("VT420 Emulator starting...");
 
     size_t rom_len = 0;
-    uint8_t *rom = load_rom(args->rom_path, &rom_len);
+    uint8_t *rom = load_rom(args->rom, &rom_len);
     if (!rom)
         return 1;
 
@@ -419,7 +416,7 @@ static int run_vt5xx(const cli_args *args, vt5xx_kind kind, const char *name)
     LOG_INFOF("%s Emulator starting...", name);
 
     size_t rom_len = 0;
-    uint8_t *rom = load_rom(args->rom_path, &rom_len);
+    uint8_t *rom = load_rom(args->rom, &rom_len);
     if (!rom)
         return 1;
 
@@ -464,7 +461,7 @@ static int run_vt5xx(const cli_args *args, vt5xx_kind kind, const char *name)
 static int run_mcp(const cli_args *args)
 {
     size_t rom_len = 0;
-    uint8_t *rom = load_rom(args->rom_path, &rom_len);
+    uint8_t *rom = load_rom(args->rom, &rom_len);
 
     if (!rom)
         return 1;

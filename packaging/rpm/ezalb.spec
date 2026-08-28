@@ -18,19 +18,16 @@ on the emulated terminal.
 
 %install
 mkdir -p %{buildroot}%{_bindir} \
-         %{buildroot}%{_datadir}/ezalb/roms/vt420 \
          %{buildroot}%{_datadir}/applications \
          %{buildroot}%{_datadir}/icons/hicolor/256x256/apps \
          %{buildroot}%{_docdir}/ezalb
 install -m 755 %{srcroot}/ezalb %{buildroot}%{_bindir}/ezalb
-install -m 644 %{srcroot}/roms/vt420/23-068E9-00.bin %{buildroot}%{_datadir}/ezalb/roms/vt420/
 install -m 644 %{srcroot}/packaging/shared/ezalb.desktop %{buildroot}%{_datadir}/applications/
 install -m 644 %{srcroot}/packaging/shared/ezalb.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/
 install -m 644 %{srcroot}/README.md %{srcroot}/LICENSE.md %{buildroot}%{_docdir}/ezalb/
 
 %files
 %{_bindir}/ezalb
-%{_datadir}/ezalb
 %{_datadir}/applications/ezalb.desktop
 %{_datadir}/icons/hicolor/256x256/apps/ezalb.png
 %doc %{_docdir}/ezalb

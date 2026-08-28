@@ -4,7 +4,6 @@
       "command": "./ezalb",
       "args": [
         "--mcp",
-        "--rom", "roms/vt420/23-068E9-00.bin",
         "--skip-diagnostics",
         "--comm1", "exec /bin/sh"
       ]
