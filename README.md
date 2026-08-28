@@ -1,9 +1,8 @@
-# VT420: a terminal emulator
+# VT420: a real terminal emulator
 
 Emulates the real VT420 hardware and runs the original DEC firmware ROM:
 8051 CPU, DC7166 video processor, SCN2681 DUART, ER5911 NVR EEPROM and the
 LK201/LK401 keyboard. Plain C11, single binary, SDL2 for the graphical display.
-No frameworks, no build system beyond make.
 
 A rewrite of [blaze](https://github.com/mmastrac/blaze) in plain C.
 
