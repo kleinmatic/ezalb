@@ -43,7 +43,7 @@ tool:
 
 ## Build
 
-Requires a C compiler, SDL2, zlib and pkg-config
+Requires a C compiler, GNU make, SDL2, zlib, gzip and pkg-config
 (`brew install sdl2` / `apt install libsdl2-dev zlib1g-dev pkg-config`).
 
 ```

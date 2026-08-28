@@ -7,10 +7,12 @@
 #include "host/host.h"
 #include "host/mcp.h"
 
-#if defined(__APPLE__) || defined(__linux__)
 #include <limits.h>
 #include <pwd.h>
 #include <sys/types.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
 #endif
 
 typedef enum display_mode {
@@ -121,7 +123,6 @@ static void list_roms(FILE *f)
                 builtin_roms[i].desc, builtin_roms[i].part);
 }
 
-#if defined(__APPLE__) || defined(__linux__)
 /* Launched with no arguments (a bare `ezalb`, Finder, .desktop): graphical
  * display, a login shell on comm1 and NVR persistence in $HOME. */
 static bool app_defaults(cli_args *a)
@@ -137,7 +138,7 @@ static bool app_defaults(cli_args *a)
     if (!home && pw)
         home = pw->pw_dir;
 
-    snprintf(comm1, sizeof comm1, "exec 'TERM=vt420 exec %s -l'", shell);
+    snprintf(comm1, sizeof comm1, "exec 'exec %s -l'", shell);
     if (session_config_parse(comm1, &a->comm1, NULL, 0) != 0)
         return false;
     a->comm1_set = true;
@@ -150,20 +151,17 @@ static bool app_defaults(cli_args *a)
     }
     return true;
 }
-#endif
 
 static int parse_args(int argc, char **argv, cli_args *a)
 {
     char err[256];
 
     memset(a, 0, sizeof *a);
-#if defined(__APPLE__) || defined(__linux__)
     if ((argc == 1 || (argc == 2 && strncmp(argv[1], "-psn", 4) == 0)) &&
         app_defaults(a)) {
         a->rom = default_rom(a->machine);
         return 0;
     }
-#endif
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         const char *v;

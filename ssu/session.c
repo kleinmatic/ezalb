@@ -16,6 +16,8 @@
 
 #include "common.h"
 
+extern char **environ;
+
 void ssu_global_init(void)
 {
     signal(SIGPIPE, SIG_IGN); /* Rust ignores SIGPIPE process-wide */
@@ -215,14 +217,59 @@ static int open_pipes(const char *rx, const char *tx, int *rfd, int *wfd)
     return 0;
 }
 
+/* The child talks to the emulated VT420, not to whatever terminal launched
+ * us: hand it TERM=vt420 and drop the host terminal's identity. Sharing
+ * TERM_SESSION_ID with Apple Terminal makes two login bashes write the same
+ * ~/.bash_sessions file and corrupt it. Built before fork() — setenv() in the
+ * child of a threaded process is not async-signal-safe. */
+static char **child_env(void)
+{
+    static const char *const drop[] = {
+        "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID",
+        "ITERM_SESSION_ID", "ITERM_PROFILE", "LC_TERMINAL", "LC_TERMINAL_VERSION",
+        "COLORTERM", "LINES", "COLUMNS",
+    };
+    size_t n = 0, k = 0;
+    char **env;
+
+    while (environ[n]) n++;
+    if (!(env = malloc((n + 2) * sizeof *env)))
+        return NULL;
+    for (size_t i = 0; i < n; i++) {
+        bool skip = false;
+        for (size_t d = 0; d < sizeof drop / sizeof drop[0] && !skip; d++) {
+            size_t len = strlen(drop[d]);
+            skip = strncmp(environ[i], drop[d], len) == 0 && environ[i][len] == '=';
+        }
+        if (!skip)
+            env[k++] = environ[i];
+    }
+    env[k++] = (char *)"TERM=vt420";
+    env[k] = NULL;
+    return env;
+}
+
+static void child_exec(const char *cmd, char **env)
+{
+    char *argv[] = { (char *)"sh", (char *)"-c", (char *)cmd, NULL };
+
+    execve("/bin/sh", argv, env ? env : environ);
+    _exit(127);
+}
+
 static int open_exec(const char *cmd, int *rfd, int *wfd)
 {
     int in[2], out[2];
-    if (pipe(in) != 0) return errno;
+    char **env = child_env();
+    if (pipe(in) != 0) {
+        free(env);
+        return errno;
+    }
     if (pipe(out) != 0) {
         int e = errno;
         close(in[0]);
         close(in[1]);
+        free(env);
         return e;
     }
     pid_t pid = fork();
@@ -232,6 +279,7 @@ static int open_exec(const char *cmd, int *rfd, int *wfd)
         close(in[1]);
         close(out[0]);
         close(out[1]);
+        free(env);
         return e;
     }
     if (pid == 0) {
@@ -248,11 +296,11 @@ static int open_exec(const char *cmd, int *rfd, int *wfd)
         if (in[1] > 2) close(in[1]);
         if (out[0] > 2) close(out[0]);
         if (out[1] > 2) close(out[1]);
-        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
-        _exit(127);
+        child_exec(cmd, env);
     }
     close(in[0]);
     close(out[1]);
+    free(env);
     fcntl(in[1], F_SETFD, FD_CLOEXEC);
     fcntl(out[0], F_SETFD, FD_CLOEXEC);
     *rfd = out[0];
@@ -265,12 +313,17 @@ static pthread_mutex_t ptsname_mu = PTHREAD_MUTEX_INITIALIZER;
 static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
                          int *rfd, int *wfd)
 {
+    char **env = child_env();
     int master = posix_openpt(O_RDWR | O_NOCTTY);
-    if (master < 0) return errno;
+    if (master < 0) {
+        free(env);
+        return errno;
+    }
     fcntl(master, F_SETFD, FD_CLOEXEC);
     if (grantpt(master) != 0 || unlockpt(master) != 0) {
         int e = errno;
         close(master);
+        free(env);
         return e;
     }
 
@@ -281,6 +334,7 @@ static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
     pthread_mutex_unlock(&ptsname_mu);
     if (!sn) {
         close(master);
+        free(env);
         return EIO;
     }
 
@@ -288,6 +342,7 @@ static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
     if (slave < 0) {
         int e = errno;
         close(master);
+        free(env);
         return e;
     }
 
@@ -296,6 +351,7 @@ static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
         int e = errno;
         close(slave);
         close(master);
+        free(env);
         return e;
     }
 
@@ -304,6 +360,7 @@ static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
         int e = errno;
         close(slave);
         close(master);
+        free(env);
         return e;
     }
     if (pid == 0) {
@@ -316,10 +373,10 @@ static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
         ioctl(slave, TIOCSCTTY, 0);
         if (slave > 2) close(slave);
         close(master);
-        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
-        _exit(127);
+        child_exec(cmd, env);
     }
     close(slave);
+    free(env);
     int rd = fcntl(master, F_DUPFD_CLOEXEC, 0); /* pty.try_clone: reader fd */
     if (rd < 0) {
         int e = errno;

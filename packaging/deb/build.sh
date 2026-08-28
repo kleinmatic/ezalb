@@ -43,8 +43,8 @@ mkdir -p "$OUT"
 dpkg-deb --build --root-owner-group "$PKG" "$OUT/ezalb_${VERSION}_${DEBARCH}.deb"
 rm -rf "$PKG"
 
-# leave no foreign objects behind for the host
+# leave no foreign objects behind for the host (build/roms would be root-owned)
 find . -name '*.o' -delete
-rm -f ezalb boot_test
+rm -rf ezalb boot_test build/roms
 
 ls -la "$OUT"/ezalb_"$VERSION"_"$DEBARCH".deb

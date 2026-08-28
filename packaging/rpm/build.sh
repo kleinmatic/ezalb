@@ -21,8 +21,8 @@ rpmbuild -bb \
 mkdir -p "$OUT"
 cp "$TOP"/RPMS/*/ezalb-*.rpm "$OUT/"
 
-# leave no foreign objects behind for the host
+# leave no foreign objects behind for the host (build/roms would be root-owned)
 find . -name '*.o' -delete
-rm -f ezalb boot_test
+rm -rf ezalb boot_test build/roms
 
 ls -la "$OUT"/ezalb-*.rpm
