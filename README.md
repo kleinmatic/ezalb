@@ -28,7 +28,7 @@ Requires a C compiler, SDL2, zlib and pkg-config
 
 ```
 make            # builds ./ezalb
-make test       # runs the ROM boot test: boots to "VT420 OK", enters Set-Up
+make test       # ROM boot test (boots to "VT420 OK", enters Set-Up) + comm session tests
 make mcp_test   # MCP smoke test: boots, types into a shell, screenshots
 ```
 
