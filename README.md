@@ -30,7 +30,9 @@ tool:
   scrolling, double width/height, blink, custom soft fonts
 - LK201/LK401 keyboard protocol
 - Two serial sessions (DUART channels A/B) connectable to a shell on a PTY,
-  a pipe/FIFO, or loopback
+  a pipe/FIFO, loopback, or a real serial port
+- Real serial ports: `--comm1 'serial /dev/cu.usbserial-1410'` talks to actual
+  hardware, and changing the speed or format in Set-Up retunes the port
 - NVR (EEPROM) persistence to a file — Set-Up changes survive restarts
 - Three display modes: SDL2 window, ANSI TUI in your terminal, headless
 - Screen recording to animated GIF: `--record FILE.gif` in graphics mode, or
@@ -76,6 +78,10 @@ into a login shell on comm1 in graphics mode, with NVR in `~/.vt420.nvr`.
 ./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --comm1 'exec /bin/sh' \
     --record demo.gif
 
+# Talk to a real serial port, minicom style
+./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics \
+    --comm1 'serial /dev/cu.usbserial-1410'
+
 # Persist Set-Up settings
 ./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics --nvr ~/.vt420.nvr
 
@@ -92,7 +98,7 @@ fast-forwards it.
 --rom FILE            ROM image (required)
 --nvr FILE            NVR EEPROM file (created if missing)
 --display MODE        headless (default) | text | graphics
---comm1 / --comm2 CFG serial session: loopback | pipe PATH |
+--comm1 / --comm2 CFG serial session: loopback | pipe PATH | serial PATH |
                       exec CMD [--no-pty] [--rows N] [--cols N]
 --record FILE         record the display to an animated GIF (graphics mode)
 --machine TYPE        vt420 (default) | vt52x | vt510
@@ -108,6 +114,21 @@ Keys: F1–F20 map to the LK201 (F3 = Set-Up, F4 = switch session), arrows,
 Home/End/PgUp/PgDn = Find/Select/Prev/Next Screen, Backspace = Delete.
 Text mode is commanded via Ctrl+G: `q` quit, space pause, `1`–`5` = F1–F5,
 `h` hex view, `d` dump VRAM to /tmp/vram.bin.
+
+## Serial ports
+
+`serial PATH` wires a session to a real serial port — `/dev/cu.*` on macOS,
+`/dev/ttyUSB*` or `/dev/ttyS*` on Linux, `/dev/cuaU*` on the BSDs.
+
+```
+./ezalb --rom roms/vt420/23-068E9-00.bin --display graphics \
+    --comm1 'serial /dev/cu.usbserial-1410'
+```
+
+The port is opened raw, and its speed and format come from Set-Up → Comm:
+whatever the firmware programs into the DUART is applied to the real port, so
+change the speed on the terminal, not on the command line. 38400 is the
+maximum, the SCN2681's own ceiling.
 
 ## MCP server — drive the VT420 from Claude Code
 

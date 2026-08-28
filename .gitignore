@@ -7,3 +7,4 @@ comm_test
 build/
 .env
 dist/
+serial_test

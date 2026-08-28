@@ -60,6 +60,8 @@ session_parts xonoff_wrap(session_parts inner)
         .send = xonoff_send,
         .recv = xonoff_recv,
         .destroy = xonoff_destroy,
+        .ctl_self = inner.ctl_self,
+        .set_line = inner.set_line,
     };
     return parts;
 }

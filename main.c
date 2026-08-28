@@ -58,7 +58,15 @@ static const char USAGE[] =
     "      --skip-diagnostics   Skip diagnostics\n"
     "      --mcp                Run as an MCP server on stdio (for AI agents)\n"
     "      --machine <TYPE>     Machine type [default: vt420] [possible values: vt420, vt52x, vt510]\n"
-    "  -h, --help               Print help\n";
+    "  -h, --help               Print help\n"
+    "\n"
+    "Session configuration (--comm1 / --comm2):\n"
+    "      loopback                 Echo back to the terminal (default)\n"
+    "      pipe <PATH>              A FIFO or other file, opened read/write\n"
+    "      exec <CMD>               Run CMD on a pty [--no-pty] [--rows N] [--cols N]\n"
+    "      serial <PATH>            A real serial port, e.g. /dev/cu.usbserial-1410,\n"
+    "                               /dev/ttyUSB0, /dev/cuaU0. Speed and format come\n"
+    "                               from Set-Up.\n";
 
 /* 0 = not this flag, 1 = matched (value in *out), -1 = missing value. */
 static int flag_value(int argc, char **argv, int *i, const char *name, const char **out)

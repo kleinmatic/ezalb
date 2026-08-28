@@ -28,12 +28,14 @@ int comm_connect_duart(comm_session *cs, duart_channel channel,
 int comm_connect_session(comm_session *cs, duart_channel channel,
                          session_parts session)
 {
-    cs->session = xonoff_wrap(session);
+    cs->session = session.no_flow_gate ? session : xonoff_wrap(session);
     cs->channel = channel;
     cs->pending_rx = -1;
     cs->pending_tx = -1;
     cs->tx_closed = false;
     cs->rx_closed = false;
+    /* Adopt the current settings silently; only later changes are pushed. */
+    cs->line_seq = channel.line_seq ? *channel.line_seq : 0;
     return 0;
 }
 
@@ -64,6 +66,13 @@ void comm_session_tick(comm_session *cs)
      * ring even once dead, because XON/XOFF ride that ring and the xonoff
      * gate consumes them before they reach the session — stop draining and
      * flow control freezes at whatever it last saw. */
+
+    /* Set-Up changed the line: retune the host port (serial sessions only) */
+    if (cs->channel.line_seq && *cs->channel.line_seq != cs->line_seq) {
+        cs->line_seq = *cs->channel.line_seq;
+        if (cs->session.set_line)
+            cs->session.set_line(cs->session.ctl_self, cs->channel.line);
+    }
 
     /* DUART's send to session's send */
     if (cs->pending_rx >= 0) {

@@ -98,6 +98,8 @@ static void io_destroy(session_parts *parts)
         ssu_chan_close(parts->recv_self);
         ssu_chan_unref(parts->recv_self);
     }
+    if (parts->ctl_self)
+        ssu_serial_unref(parts->ctl_self);
     memset(parts, 0, sizeof *parts);
 }
 
@@ -331,8 +333,10 @@ static int open_exec_pty(const char *cmd, uint16_t rows, uint16_t cols,
 
 struct io_boot {
     session_config_kind kind;
-    char *a, *b; /* pipe: path / pipes: rx,tx / exec: command */
+    char *a, *b; /* pipe: path / pipes: rx,tx / exec: command / serial: path */
     uint16_t rows, cols;
+    ssu_serial *serial;              /* serial only; opener-held ref */
+    int pre_rfd, pre_wfd;            /* serial only: opened before boot returns */
     ssu_chan *send_chan, *recv_chan; /* opener-held refs */
 };
 
@@ -340,6 +344,9 @@ static void io_boot_free(struct io_boot *bt)
 {
     free(bt->a);
     free(bt->b);
+    if (bt->pre_rfd >= 0) close(bt->pre_rfd);
+    if (bt->pre_wfd >= 0) close(bt->pre_wfd);
+    if (bt->serial) ssu_serial_unref(bt->serial);
     if (bt->send_chan) ssu_chan_unref(bt->send_chan);
     if (bt->recv_chan) ssu_chan_unref(bt->recv_chan);
     free(bt);
@@ -348,9 +355,13 @@ static void io_boot_free(struct io_boot *bt)
 static void *opener_thread(void *arg)
 {
     struct io_boot *bt = arg;
-    int rfd = -1, wfd = -1, err;
+    int rfd = -1, wfd = -1, err = 0;
 
-    switch (bt->kind) {
+    if (bt->pre_rfd >= 0) { /* serial: already open, boot would have failed */
+        rfd = bt->pre_rfd;
+        wfd = bt->pre_wfd;
+        bt->pre_rfd = bt->pre_wfd = -1;
+    } else switch (bt->kind) {
     case SESSION_CFG_PIPE:  err = open_pipe(bt->a, &rfd, &wfd); break;
     case SESSION_CFG_PIPES: err = open_pipes(bt->a, bt->b, &rfd, &wfd); break;
     case SESSION_CFG_EXEC:  err = open_exec(bt->a, &rfd, &wfd); break;
@@ -387,6 +398,7 @@ static int boot_io(const session_config *cfg, session_parts *out)
     struct io_boot *bt = calloc(1, sizeof *bt);
     if (!bt) return -1;
     bt->kind = cfg->kind;
+    bt->pre_rfd = bt->pre_wfd = -1;
 
     int bad = 0;
     switch (cfg->kind) {
@@ -405,6 +417,22 @@ static int boot_io(const session_config *cfg, session_parts *out)
         bt->rows = cfg->u.exec_pty.rows;
         bt->cols = cfg->u.exec_pty.cols;
         break;
+    /* Unlike the other kinds, a serial port is opened before boot returns:
+     * a wrong device path is a typo the user needs to see, not a terminal
+     * that silently never talks to anything. */
+    case SESSION_CFG_SERIAL: {
+        bad = !(bt->a = strdup(cfg->u.serial.path)) ||
+              !(bt->serial = ssu_serial_new());
+        int e = bad ? ENOMEM
+                    : ssu_serial_open(bt->serial, bt->a, &bt->pre_rfd, &bt->pre_wfd);
+        if (e) {
+            if (!bad)
+                LOG_ERRORF("Cannot open serial port \"%s\": %s", bt->a, strerror(e));
+            io_boot_free(bt);
+            return -1;
+        }
+        break;
+    }
     default:
         bad = 1;
         break;
@@ -423,6 +451,13 @@ static int boot_io(const session_config *cfg, session_parts *out)
     out->send = io_send;
     out->recv = io_recv;
     out->destroy = io_destroy;
+    if (bt->serial) {
+        ssu_serial_ref(bt->serial); /* endpoint ref; bt keeps the opener ref */
+        out->ctl_self = bt->serial;
+        out->set_line = ssu_serial_set_line;
+        /* A real peer needs to see the terminal's XON/XOFF on the wire. */
+        out->no_flow_gate = true;
+    }
 
     pthread_t t;
     int rc = pthread_create(&t, NULL, opener_thread, bt);

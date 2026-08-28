@@ -120,6 +120,10 @@ typedef struct duart_channel {
     byte_ring *rx;  /* pop from here */
     byte_ring *tx;  /* push here     */
     bool      *dtr; /* shared; initial true */
+    /* Line settings the guest programmed; seq bumps on every change so a
+     * host session can retune a real tty without polling termios. */
+    line_params *line;
+    uint32_t    *line_seq;
 } duart_channel;
 
 /* Backing storage for a crossed ring pair + shared dtr. */
@@ -127,6 +131,8 @@ typedef struct duart_pipe {
     uint8_t   a2b_buf[DUART_RING_CAP], b2a_buf[DUART_RING_CAP];
     byte_ring a2b, b2a;
     bool      dtr;
+    line_params line; /* 9600 8N1 until the guest programs CSR/MR */
+    uint32_t    line_seq;
 } duart_pipe;
 
 /* Initializes pipe storage and both crossed channel views. */
@@ -135,7 +141,7 @@ void duart_channel_pair(duart_pipe *storage, duart_channel *end0, duart_channel 
 typedef struct duart_half {
     duart_channel channel;
     uint16_t cooldown;
-    uint8_t  mr1, mr2;
+    uint8_t  mr1, mr2, csr;
     bool     mr_ptr; /* false => next MR access is MR1 */
     bool     rx_has; uint8_t rx_byte; /* 1-deep RX holding */
     bool     tx_has; uint8_t tx_byte; /* 1-deep TX holding */
@@ -143,7 +149,8 @@ typedef struct duart_half {
 
 typedef struct duart {
     duart_half a, b;
-    bool     clock_select_warned;
+    uint8_t  acr;             /* only bit 7 (baud rate generator set) is used */
+    bool     baud_warned;
     uint16_t reset_sleep;     /* starts DUART_RESET_SLEEP */
     uint8_t  interrupt_mask;  /* IMR */
     bool     interrupt;       /* out: imr != 0 && (rxA || rxB pending) */

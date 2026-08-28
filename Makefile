@@ -14,7 +14,7 @@ OBJS = common.o \
        i8051/cpu.o i8051/op.o i8051/peripheral.o \
        machine/generic.o machine/duart.o machine/vt420.o machine/video.o machine/vt5xx.o \
        lk201/lk201.o lk201/keys.o \
-       ssu/chan.o ssu/session.o ssu/xonoff.o ssu/config.o \
+       ssu/chan.o ssu/session.o ssu/xonoff.o ssu/config.o ssu/serial.o \
        host/comm.o host/logging.o host/unicode.o host/headless.o \
        host/fb_render.o host/sdl.o host/text.o host/termkey.o \
        host/ctl.o host/mcp.o host/json.o host/png.o host/gif.o
@@ -30,12 +30,16 @@ ezalb: $(OBJS) main.o
 boot_test: $(OBJS) tests/boot_test.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
+serial_test: $(OBJS) tests/serial_test.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
 comm_test: $(OBJS) tests/comm_test.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-test: boot_test comm_test
+test: boot_test comm_test serial_test
 	./boot_test roms/vt420/23-068E9-00.bin
 	./comm_test
+	./serial_test
 
 mcp_test: ezalb
 	tests/mcp_test.sh ./ezalb roms/vt420/23-068E9-00.bin
@@ -44,7 +48,8 @@ mcp_test: ezalb
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJS) main.o tests/boot_test.o tests/comm_test.o ezalb boot_test comm_test
+	rm -f $(OBJS) main.o tests/boot_test.o tests/comm_test.o tests/serial_test.o \
+	      ezalb boot_test comm_test serial_test
 	rm -rf $(BUILD)
 
 # ---- macOS app bundle / dmg / notarized release ----

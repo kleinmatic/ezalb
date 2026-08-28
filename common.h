@@ -21,6 +21,21 @@ bool     byte_ring_push(byte_ring *r, uint8_t b);   /* false when full */
 bool     byte_ring_pop(byte_ring *r, uint8_t *out); /* false when empty */
 uint32_t byte_ring_len(const byte_ring *r);
 
+/* Serial line settings. Programmed by the DUART from its CSR/ACR/MR
+ * registers; applied to a real tty by a serial session. */
+typedef struct line_params {
+    uint32_t baud;
+    uint8_t  data_bits; /* 5..8 */
+    uint8_t  stop_bits; /* 1 or 2 */
+    char     parity;    /* 'N' | 'E' | 'O' */
+} line_params;
+
+static inline bool line_params_eq(const line_params *a, const line_params *b)
+{
+    return a->baud == b->baud && a->data_bits == b->data_bits &&
+           a->stop_bits == b->stop_bits && a->parity == b->parity;
+}
+
 typedef enum log_level {
     LOG_OFF = 0, LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG, LOG_TRACE
 } log_level;

@@ -1,6 +1,7 @@
 /* ssu.h — session subsystem (transcribed from crates/ssu/src/session).
- * Scope: loopback, pipe, pipes, exec, exec-pty, xon/xoff gate, config parser.
- * Excluded: SSU server multiplexer (server.rs/ops.rs/buffer.rs), serial, wasm.
+ * Scope: loopback, pipe, pipes, exec, exec-pty, serial, xon/xoff gate,
+ * config parser.
+ * Excluded: SSU server multiplexer (server.rs/ops.rs/buffer.rs), wasm.
  *
  * Model: endpoint objects are polled from the emulation thread; pipe/exec
  * sessions run pump threads that talk to the endpoints via ssu_chan. */
@@ -12,6 +13,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "common.h"
 
 #define SSU_XON  0x11u /* DC1 */
 #define SSU_XOFF 0x13u /* DC3 */
@@ -34,6 +37,12 @@ struct session_parts {
     sess_status (*send)(void *self, uint8_t b);
     sess_status (*recv)(void *self, uint8_t *out);
     void (*destroy)(session_parts *self);
+    /* Serial sessions only (NULL elsewhere): retune the host tty when the
+     * guest reprograms the DUART, and skip the xon/xoff gate so the
+     * terminal's own flow control reaches the wire. */
+    void *ctl_self;
+    int (*set_line)(void *self, const line_params *p);
+    bool no_flow_gate;
 };
 
 void session_parts_destroy(session_parts *parts); /* NULL-safe convenience */
@@ -44,7 +53,8 @@ typedef enum session_config_kind {
     SESSION_CFG_PIPE,         /* single path, O_RDWR + dup */
     SESSION_CFG_PIPES,        /* separate rx/tx FIFOs (unreachable from CLI) */
     SESSION_CFG_EXEC,         /* sh -c on stdio pipes (--no-pty) */
-    SESSION_CFG_EXEC_PTY      /* sh -c on a pty (default for `exec`) */
+    SESSION_CFG_EXEC_PTY,     /* sh -c on a pty (default for `exec`) */
+    SESSION_CFG_SERIAL        /* real host serial port (termios) */
 } session_config_kind;
 
 typedef struct session_config {
@@ -55,6 +65,7 @@ typedef struct session_config {
         struct { char *rx_path, *tx_path; } pipes;
         struct { char *command; } exec;
         struct { char *cmd; uint16_t rows, cols; } exec_pty; /* nonzero; defaults 24/80 */
+        struct { char *path; } serial; /* speed and format come from Set-Up */
     } u;
 } session_config;
 
@@ -65,6 +76,7 @@ void session_config_default(session_config *out);
  *   loopback [INITIAL]
  *   pipe <PATH> [...]
  *   exec <COMMAND> [--no-pty] [--rows N] [--cols N]
+ *   serial <PATH>
  * Shell-ish tokenization: whitespace split, '...' literal, "..." with
  * backslash escapes, backslash escapes outside quotes.
  * Returns 0 on success; nonzero writes a message into err (may be NULL). */
@@ -127,6 +139,21 @@ void loopback_queue_ref(loopback_queue *q);
 void loopback_queue_unref(loopback_queue *q);
 void loopback_queue_push(loopback_queue *q, uint8_t b);
 bool loopback_queue_pop(loopback_queue *q, uint8_t *out);
+
+/* serial.c — host serial port. The control handle is refcounted and shared
+ * between the opener thread and the session endpoints; the tty is retuned
+ * through it whenever the guest reprograms the DUART. */
+typedef struct ssu_serial ssu_serial;
+
+ssu_serial *ssu_serial_new(void); /* refs = 1 */
+void ssu_serial_ref(ssu_serial *s);
+void ssu_serial_unref(ssu_serial *s); /* last unref closes the port */
+/* Opens path raw at the factory 9600 8N1 — which only holds until the
+ * firmware programs the DUART a second or two into boot — and hands back
+ * two dup'd fds for the pump threads. Returns 0 or an errno. */
+int  ssu_serial_open(ssu_serial *s, const char *path, int *rfd, int *wfd);
+/* session_parts.set_line hook: puts Set-Up's settings on the wire. */
+int  ssu_serial_set_line(void *self, const line_params *p);
 
 /* Process-wide prerequisites (idempotent): signal(SIGPIPE, SIG_IGN) — Rust
  * ignores SIGPIPE; signal(SIGCHLD, SIG_IGN) — exec children are never reaped. */

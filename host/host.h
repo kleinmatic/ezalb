@@ -17,16 +17,18 @@
  * Moves <=1 byte per direction per tick; pending bytes are held back and
  * retried (Rust CommSession::tick). */
 typedef struct comm_session {
-    session_parts session; /* xonoff-wrapped endpoints */
+    session_parts session; /* xonoff-wrapped endpoints (raw for serial) */
     duart_channel channel; /* host end: rx = from DUART, tx = to DUART */
     int pending_rx, pending_tx; /* -1 = none, else 0..255 */
     bool tx_closed, rx_closed; /* far end gone: logged once; rx stops polling */
+    uint32_t line_seq;     /* last channel.line_seq pushed to the session */
 } comm_session;
 
 /* connect_duart: session_config_start + xonoff_wrap + connect. 0 / -1. */
 int  comm_connect_duart(comm_session *cs, duart_channel channel,
                         const session_config *config);
-/* connect_session: wrap pre-booted endpoints (gate installed here). */
+/* connect_session: wrap pre-booted endpoints (gate installed here, unless
+ * the session asked to keep flow control on the wire). */
 int  comm_connect_session(comm_session *cs, duart_channel channel,
                           session_parts session);
 void comm_session_tick(comm_session *cs);

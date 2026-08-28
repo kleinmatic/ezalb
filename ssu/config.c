@@ -332,6 +332,25 @@ static int parse_exec(const struct tokens *t, session_config *out,
     return 0;
 }
 
+static int parse_serial(const struct tokens *t, session_config *out,
+                        char *err, size_t err_len)
+{
+    const char *pos[1];
+    size_t npos;
+
+    if (positionals(t, pos, 1, &npos, err, err_len))
+        return -1;
+    if (npos != 1)
+        return fail(err, err_len,
+                    "Invalid session configuration: 'serial' takes <PATH>");
+    char *path = dup_str(pos[0]);
+    if (!path)
+        return fail(err, err_len, "out of memory");
+    out->kind = SESSION_CFG_SERIAL;
+    out->u.serial.path = path;
+    return 0;
+}
+
 /* ---- public API ---- */
 
 void session_config_default(session_config *out)
@@ -360,6 +379,8 @@ int session_config_parse(const char *s, session_config *out,
         rc = parse_pipe(&toks, out, err, err_len);
     else if (!strcmp(toks.v[0], "exec"))
         rc = parse_exec(&toks, out, err, err_len);
+    else if (!strcmp(toks.v[0], "serial"))
+        rc = parse_serial(&toks, out, err, err_len);
     else
         rc = fail(err, err_len,
                   "Invalid session configuration: unrecognized subcommand '%s'", toks.v[0]);
@@ -377,6 +398,7 @@ void session_config_free(session_config *cfg)
     case SESSION_CFG_PIPES:    free(cfg->u.pipes.rx_path); free(cfg->u.pipes.tx_path); break;
     case SESSION_CFG_EXEC:     free(cfg->u.exec.command); break;
     case SESSION_CFG_EXEC_PTY: free(cfg->u.exec_pty.cmd); break;
+    case SESSION_CFG_SERIAL:   free(cfg->u.serial.path); break;
     }
     memset(cfg, 0, sizeof *cfg);
 }

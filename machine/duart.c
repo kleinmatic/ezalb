@@ -8,12 +8,63 @@ void duart_channel_pair(duart_pipe *storage, duart_channel *end0, duart_channel 
     byte_ring_init(&storage->a2b, storage->a2b_buf, DUART_RING_CAP);
     byte_ring_init(&storage->b2a, storage->b2a_buf, DUART_RING_CAP);
     storage->dtr = true;
+    storage->line = (line_params){ .baud = 9600, .data_bits = 8, .stop_bits = 1, .parity = 'N' };
+    storage->line_seq = 0;
     end0->rx = &storage->b2a;
     end0->tx = &storage->a2b;
     end0->dtr = &storage->dtr;
+    end0->line = &storage->line;
+    end0->line_seq = &storage->line_seq;
     end1->rx = &storage->a2b;
     end1->tx = &storage->b2a;
     end1->dtr = &storage->dtr;
+    end1->line = &storage->line;
+    end1->line_seq = &storage->line_seq;
+}
+
+/* SCN2681 baud rate generator, 3.6864 MHz crystal. ACR bit 7 picks the set;
+ * the CSR nibbles index it. 0 = not a fixed rate (counter/timer or an
+ * external clock on IP2) — nothing a host tty can be set to. */
+static const uint32_t BAUD_SET[2][16] = {
+    { 50, 110, 134, 200, 300, 600, 1200, 1050,
+      2400, 4800, 7200, 9600, 38400, 0, 0, 0 },
+    { 75, 110, 134, 150, 300, 600, 1200, 2000,
+      2400, 4800, 1800, 9600, 19200, 0, 0, 0 },
+};
+
+/* Recomputes the channel's line settings from CSR/ACR/MR1/MR2 and publishes
+ * them to the host session (which may be a real serial port). */
+static void line_program(duart *d, duart_half *h, char name)
+{
+    line_params p = *h->channel.line;
+    const uint32_t *set = BAUD_SET[(d->acr >> 7) & 1];
+    uint32_t tx = set[h->csr & 0x0f], rx = set[(h->csr >> 4) & 0x0f];
+
+    /* A tty has one speed: prefer transmit, fall back to receive. */
+    if (tx || rx) {
+        p.baud = tx ? tx : rx;
+    } else if (!d->baud_warned) {
+        /* Self-test sweeps through timer mode, so this is normal on the way
+         * up; only a serial session would care, and it keeps its rate. */
+        LOG_DEBUGF("DUART channel %c baud select %02X is timer/external, "
+                   "keeping %u", name, h->csr, p.baud);
+        d->baud_warned = true;
+    }
+
+    p.data_bits = (uint8_t)(5 + (h->mr1 & 3));
+    /* MR1[4:3] 00 = with parity, 01 = force, 10 = none, 11 = multidrop.
+     * Only "with parity" maps onto a tty; the rest run unparitied. */
+    p.parity = ((h->mr1 >> 3) & 3) ? 'N' : ((h->mr1 & 4) ? 'O' : 'E');
+    p.stop_bits = (h->mr2 & 0x0f) >= 8 ? 2 : 1;
+
+    if (line_params_eq(&p, h->channel.line))
+        return;
+    *h->channel.line = p;
+    ++*h->channel.line_seq;
+    /* Debug: self-test sweeps every rate and format, and only a serial
+     * session can act on this. ssu/serial.c logs the ones that land. */
+    LOG_DEBUGF("DUART channel %c line set to %u %u%c%u", name, p.baud,
+               p.data_bits, p.parity, p.stop_bits);
 }
 
 void duart_init(duart *d, duart_pipe *pipe_a, duart_pipe *pipe_b,
@@ -39,16 +90,17 @@ static uint8_t mr_read(duart_half *h, char name)
     return h->mr2;
 }
 
-static void mr_write(duart_half *h, char name, uint8_t value)
+static void mr_write(duart *d, duart_half *h, char name, uint8_t value)
 {
     if (!h->mr_ptr) {
         h->mr_ptr = true;
         LOG_TRACEF("DUART write MR%c1", name);
         h->mr1 = value;
-        return;
+    } else {
+        LOG_TRACEF("DUART write MR%c2", name);
+        h->mr2 = value;
     }
-    LOG_TRACEF("DUART write MR%c2", name);
-    h->mr2 = value;
+    line_program(d, h, name);
 }
 
 static uint8_t sr_read(const duart_half *h)
@@ -104,19 +156,21 @@ void duart_write(duart *d, uint8_t reg, uint8_t value)
 {
     switch (reg) {
     case DUART_W_CRA:  cr_write(&d->a, value); break;
-    case DUART_W_MRA:  mr_write(&d->a, 'A', value); break;
+    case DUART_W_MRA:  mr_write(d, &d->a, 'A', value); break;
     case DUART_W_THRA: d->a.tx_has = true; d->a.tx_byte = value; break;
     case DUART_W_CRB:  cr_write(&d->b, value); break;
-    case DUART_W_MRB:  mr_write(&d->b, 'B', value); break;
+    case DUART_W_MRB:  mr_write(d, &d->b, 'B', value); break;
     case DUART_W_THRB: d->b.tx_has = true; d->b.tx_byte = value; break;
     case DUART_W_SET_OUTPUT_BITS:   d->output_bits_inv |= value; break;
     case DUART_W_RESET_OUTPUT_BITS: d->output_bits_inv &= (uint8_t)~value; break;
-    case DUART_W_CSRA:
-    case DUART_W_CSRB:
-        if (!d->clock_select_warned) {
-            LOG_WARNF("DUART clock select register write ignored, running at fixed baud rate");
-            d->clock_select_warned = true;
-        }
+    /* The emulated link itself always runs flat out; the decoded rate only
+     * matters to a session attached to a real serial port. */
+    case DUART_W_CSRA: d->a.csr = value; line_program(d, &d->a, 'A'); break;
+    case DUART_W_CSRB: d->b.csr = value; line_program(d, &d->b, 'B'); break;
+    case DUART_W_ACR:
+        d->acr = value;
+        line_program(d, &d->a, 'A');
+        line_program(d, &d->b, 'B');
         break;
     case DUART_W_IMR:
         d->interrupt_mask = value;
