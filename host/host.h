@@ -62,7 +62,7 @@ void fb_stepper_update(vt420_system *sys, i8051_cpu *cpu);
 
 /* host/wgpu constants + frame policy (policy.rs; implemented in sdl.c) */
 #define FB_MAX_SURFACE  4096u
-#define FB_WINDOW_TITLE "VT420"
+#define FB_WINDOW_TITLE "VT420 — F3 for Set-Up"
 
 #define POLICY_UPDATE_STEP_NS 16666000ull /* 60 Hz updates */
 #define POLICY_RENDER_STEP_NS 33333000ull /* 30 fps render cap */

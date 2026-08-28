@@ -156,6 +156,7 @@ static bool app_defaults(cli_args *a)
     if (home) {
         snprintf(nvr, sizeof nvr, "%s/.vt420.nvr", home);
         a->nvr_path = nvr;
+        (void)chdir(home); /* Finder/LaunchServices starts an app in / */
     }
     return true;
 }
