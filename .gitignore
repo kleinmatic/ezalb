@@ -1,5 +1,5 @@
 *.o
-ezalb
+/vt420
 boot_test
 comm_test
 .clangd

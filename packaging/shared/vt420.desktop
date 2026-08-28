@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Ezalb
-GenericName=VT420 Terminal Emulator
+Name=VT420
+GenericName=Terminal Emulator
 Comment=Hardware-level VT420 emulator running the original DEC firmware
-Exec=ezalb
-Icon=ezalb
+Exec=vt420
+Icon=vt420
 Terminal=false
 Categories=System;TerminalEmulator;
 Keywords=vt420;vt;dec;terminal;serial;emulator;8051;

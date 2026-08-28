@@ -1,4 +1,4 @@
-/* common.h — shared primitives for ezalb, a C port of blaze. */
+/* common.h — shared primitives for vt420, a C port of blaze. */
 #ifndef BLAZE_COMMON_H
 #define BLAZE_COMMON_H
 

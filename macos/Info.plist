@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Ezalb</string>
+    <string>VT420</string>
     <key>CFBundleDisplayName</key>
-    <string>Ezalb</string>
+    <string>VT420</string>
     <key>CFBundleIdentifier</key>
-    <string>com.github.tenox7.ezalb</string>
+    <string>com.github.tenox7.vt420</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleExecutable</key>
-    <string>ezalb</string>
+    <string>vt420</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>

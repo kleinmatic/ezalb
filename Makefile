@@ -29,9 +29,9 @@ ROMZ = $(BUILD)/roms/vt420/23-068E9-00.z $(BUILD)/roms/vt420/23-208E9-00.z \
        $(BUILD)/roms/vt420/2E-C394A-01.z $(BUILD)/roms/vt510/23-032ED-00.z \
        $(BUILD)/roms/vt520/23-010ED-00.z $(BUILD)/roms/vt525/23-011ED-00.z
 
-all: ezalb
+all: vt420
 
-ezalb: $(OBJS) main.o
+vt420: $(OBJS) main.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
 boot_test: $(OBJS) tests/boot_test.o
@@ -48,8 +48,8 @@ test: boot_test comm_test serial_test
 	./comm_test
 	./serial_test
 
-mcp_test: ezalb
-	tests/mcp_test.sh ./ezalb
+mcp_test: vt420
+	tests/mcp_test.sh ./vt420
 
 %.o: %.c $(HDRS)
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -65,13 +65,13 @@ $(BUILD)/roms/%.z: roms/%.bin
 
 clean:
 	rm -f $(OBJS) main.o tests/boot_test.o tests/comm_test.o tests/serial_test.o \
-	      ezalb boot_test comm_test serial_test
+	      vt420 boot_test comm_test serial_test
 	rm -rf $(BUILD)
 
 # ---- macOS app bundle / dmg / notarized release ----
 
-APP     = $(BUILD)/Ezalb.app
-DMG     = $(BUILD)/Ezalb.dmg
+APP     = $(BUILD)/VT420.app
+DMG     = $(BUILD)/VT420.dmg
 STAGING = $(BUILD)/dmg_staging
 
 icon: $(BUILD)/AppIcon.icns
@@ -82,19 +82,19 @@ $(BUILD)/AppIcon.icns: macos/gen_icon.swift
 
 # Bundles the SDL2 dylib (and SDL3, which sdl2-compat dlopens via
 # @loader_path/libSDL3.dylib) so the app runs without Homebrew.
-app: ezalb $(BUILD)/AppIcon.icns
+app: vt420 $(BUILD)/AppIcon.icns
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Frameworks $(APP)/Contents/Resources
-	cp ezalb $(APP)/Contents/MacOS/
+	cp vt420 $(APP)/Contents/MacOS/
 	cp macos/Info.plist $(APP)/Contents/
 	cp $(BUILD)/AppIcon.icns $(APP)/Contents/Resources/
-	SDL2=$$(otool -L ezalb | awk '/libSDL2/{print $$1; exit}'); \
+	SDL2=$$(otool -L vt420 | awk '/libSDL2/{print $$1; exit}'); \
 	cp "$$SDL2" $(APP)/Contents/Frameworks/libSDL2-2.0.0.dylib; \
 	chmod 644 $(APP)/Contents/Frameworks/libSDL2-2.0.0.dylib; \
 	install_name_tool -id @executable_path/../Frameworks/libSDL2-2.0.0.dylib \
 		$(APP)/Contents/Frameworks/libSDL2-2.0.0.dylib; \
 	install_name_tool -change "$$SDL2" @executable_path/../Frameworks/libSDL2-2.0.0.dylib \
-		$(APP)/Contents/MacOS/ezalb; \
+		$(APP)/Contents/MacOS/vt420; \
 	case "$$SDL2" in *sdl2-compat*) \
 		cp "$$(brew --prefix sdl3)/lib/libSDL3.0.dylib" $(APP)/Contents/Frameworks/libSDL3.dylib; \
 		chmod 644 $(APP)/Contents/Frameworks/libSDL3.dylib; \
@@ -108,7 +108,7 @@ define build_dmg
 	@mkdir -p $(STAGING)
 	cp -R $(APP) $(STAGING)/
 	ln -s /Applications $(STAGING)/Applications
-	hdiutil create -volname Ezalb -srcfolder $(STAGING) -ov -format UDZO $(1)
+	hdiutil create -volname VT420 -srcfolder $(STAGING) -ov -format UDZO $(1)
 	@rm -rf $(STAGING)
 endef
 
@@ -121,10 +121,10 @@ release: app
 	codesign --force --options runtime --timestamp --sign "$(DEV_ID)" $(APP)/Contents/Frameworks/*.dylib
 	codesign --force --options runtime --timestamp --sign "$(DEV_ID)" $(APP)
 	# staple the .app too, so it still validates once dragged out of the dmg
-	ditto -c -k --keepParent $(APP) $(BUILD)/Ezalb-app.zip
-	xcrun notarytool submit $(BUILD)/Ezalb-app.zip --keychain-profile "$(NOTARY_PROFILE)" --wait
+	ditto -c -k --keepParent $(APP) $(BUILD)/VT420-app.zip
+	xcrun notarytool submit $(BUILD)/VT420-app.zip --keychain-profile "$(NOTARY_PROFILE)" --wait
 	xcrun stapler staple $(APP)
-	@rm -f $(BUILD)/Ezalb-app.zip
+	@rm -f $(BUILD)/VT420-app.zip
 	$(call build_dmg,$(DMG))
 	codesign --force --timestamp --sign "$(DEV_ID)" $(DMG)
 	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
@@ -140,16 +140,16 @@ HOSTARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
 deb: deb-$(HOSTARCH)
 deb-all: deb-amd64 deb-arm64
 deb-%:
-	$(DOCKER) build --platform=linux/$* -t ezalb-deb-builder-$* packaging/deb
+	$(DOCKER) build --platform=linux/$* -t vt420-deb-builder-$* packaging/deb
 	$(DOCKER) run --rm --platform=linux/$* -e VERSION=$(VERSION) \
-		-v $(CURDIR):/work -w /work ezalb-deb-builder-$* packaging/deb/build.sh
+		-v $(CURDIR):/work -w /work vt420-deb-builder-$* packaging/deb/build.sh
 
 rpm: rpm-$(HOSTARCH)
 rpm-all: rpm-amd64 rpm-arm64
 rpm-%:
-	$(DOCKER) build --platform=linux/$* -t ezalb-rpm-builder-$* packaging/rpm
+	$(DOCKER) build --platform=linux/$* -t vt420-rpm-builder-$* packaging/rpm
 	$(DOCKER) run --rm --platform=linux/$* -e VERSION=$(VERSION) \
-		-v $(CURDIR):/work -w /work ezalb-rpm-builder-$* packaging/rpm/build.sh
+		-v $(CURDIR):/work -w /work vt420-rpm-builder-$* packaging/rpm/build.sh
 
 linux-packages: deb rpm
 linux-packages-all: deb-all rpm-all

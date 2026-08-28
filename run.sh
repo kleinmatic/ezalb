@@ -1,1 +1,1 @@
-./ezalb --display graphics --comm1 'exec /bin/bash'
+./vt420 --display graphics --comm1 'exec /bin/bash'

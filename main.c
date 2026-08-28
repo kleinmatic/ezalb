@@ -40,7 +40,7 @@ typedef struct cli_args {
 static const char USAGE[] =
     "A VT420 terminal emulator using 8051 CPU emulation\n"
     "\n"
-    "Usage: ezalb [OPTIONS]\n"
+    "Usage: vt420 [OPTIONS]\n"
     "\n"
     "Options:\n"
     "      --rom <NAME|PATH>    Built-in ROM name or ROM file [default: per --machine]\n"
@@ -133,7 +133,7 @@ static bool usable_shell(const char *s)
     return strcmp(base, "nologin") != 0 && strcmp(base, "false") != 0;
 }
 
-/* Launched with no arguments (a bare `ezalb`, Finder, .desktop): graphical
+/* Launched with no arguments (a bare `vt420`, Finder, .desktop): graphical
  * display, a login shell on comm1 and NVR persistence in $HOME. */
 static bool app_defaults(cli_args *a)
 {

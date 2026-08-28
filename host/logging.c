@@ -1,5 +1,5 @@
 /* host/logging.rs — sink installers for common.h log_emit: bare stderr
- * (headless/graphics) or timestamped $TMPDIR/ezalb-vt.log (text --log). */
+ * (headless/graphics) or timestamped $TMPDIR/vt420.log (text --log). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -51,7 +51,7 @@ void logging_setup_file(log_level level)
 
     if (!tmp || !*tmp)
         tmp = "/tmp";
-    snprintf(path, sizeof path, "%s/ezalb-vt.log", tmp);
+    snprintf(path, sizeof path, "%s/vt420.log", tmp);
     log_file = fopen(path, "w");
     if (!log_file) {
         fprintf(stderr, "Failed to create log file %s\n", path);

@@ -452,7 +452,7 @@ static void handle_initialize(const json_node *id, const json_node *params)
     jb_raw(&b, "{\"protocolVersion\":");
     jb_str(&b, ver);
     jb_raw(&b, ",\"capabilities\":{\"tools\":{}},"
-               "\"serverInfo\":{\"name\":\"ezalb\",\"version\":\"0.1.0\"},"
+               "\"serverInfo\":{\"name\":\"vt420\",\"version\":\"0.1.0\"},"
                "\"instructions\":");
     json_buf i;
     json_buf_init(&i);

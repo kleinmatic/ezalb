@@ -4,7 +4,7 @@
 # The $(echo OK) trick keeps the expected output off the typed command line.
 set -e
 
-BIN=${1:-./ezalb}
+BIN=${1:-./vt420}
 ROM=${2:-vt420}
 OUT=$(mktemp)
 GIF="$OUT.gif"

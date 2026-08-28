@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "vt420": {
-      "command": "./ezalb",
+      "command": "./vt420",
       "args": [
         "--mcp",
         "--skip-diagnostics",

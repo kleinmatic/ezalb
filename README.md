@@ -1,11 +1,11 @@
-# Ezalb: a VT420 terminal emulator
+# VT420: a terminal emulator
 
-Ezalb emulates the real VT420 hardware and runs the original DEC firmware ROM:
+Emulates the real VT420 hardware and runs the original DEC firmware ROM:
 8051 CPU, DC7166 video processor, SCN2681 DUART, ER5911 NVR EEPROM and the
 LK201/LK401 keyboard. Plain C11, single binary, SDL2 for the graphical display.
 No frameworks, no build system beyond make.
 
-Ezalb is a rewrite of [blaze](https://github.com/mmastrac/blaze) in plain C.
+A rewrite of [blaze](https://github.com/mmastrac/blaze) in plain C.
 
 ## Screenshots
 
@@ -47,7 +47,7 @@ Requires a C compiler, GNU make, SDL2, zlib, gzip and pkg-config
 (`brew install sdl2` / `apt install libsdl2-dev zlib1g-dev pkg-config`).
 
 ```
-make            # builds ./ezalb
+make            # builds ./vt420
 make test       # ROM boot test (boots to "VT420 OK", enters Set-Up) + comm session tests
 make mcp_test   # MCP smoke test: boots, types into a shell, screenshots
 ```
@@ -55,41 +55,41 @@ make mcp_test   # MCP smoke test: boots, types into a shell, screenshots
 ## Packages
 
 ```
-make app        # macOS Ezalb.app (bundles SDL, double-click = shell)
-make dmg        # build/Ezalb.dmg
+make app        # macOS VT420.app (bundles SDL, double-click = shell)
+make dmg        # build/VT420.dmg
 make release    # signed + notarized dmg (DEV_ID/NOTARY_PROFILE in .env)
 make deb rpm    # Linux packages via docker, output in dist/
                 # cross-arch: deb-amd64 deb-arm64 rpm-amd64 rpm-arm64
 ```
 
-Launched with no arguments (bare `ezalb`, Finder, .desktop) it boots straight
+Launched with no arguments (bare `vt420`, Finder, .desktop) it boots straight
 into a login shell on comm1 in graphics mode, with NVR in `~/.vt420.nvr`.
 
 ## Quick start
 
 ```
 # Login shell in a VT420 window
-./ezalb
+./vt420
 
 # Graphical display, shell on comm1
-./ezalb --display graphics --comm1 'exec /bin/sh'
+./vt420 --display graphics --comm1 'exec /bin/sh'
 
 # ANSI TUI in your terminal
-./ezalb --display text --comm1 'exec /bin/sh'
+./vt420 --display text --comm1 'exec /bin/sh'
 
 # Record the session to an animated GIF
-./ezalb --display graphics --comm1 'exec /bin/sh' \
+./vt420 --display graphics --comm1 'exec /bin/sh' \
     --record demo.gif
 
 # Talk to a real serial port, minicom style
-./ezalb --display graphics \
+./vt420 --display graphics \
     --comm1 'serial /dev/cu.usbserial-1410'
 
 # Persist Set-Up settings
-./ezalb --display graphics --nvr ~/.vt420.nvr
+./vt420 --display graphics --nvr ~/.vt420.nvr
 
 # Benchmark the CPU core
-./ezalb --benchmark
+./vt420 --benchmark
 ```
 
 Boot runs a couple of seconds of firmware self-test; `--skip-diagnostics`
@@ -109,7 +109,7 @@ fast-forwards it.
 --mcp                 run as an MCP server on stdio (see below)
 --benchmark           run 100M instructions and report speed
 --skip-diagnostics    fast-forward power-on self-test
---log                 log to $TMPDIR/ezalb-vt.log (text mode)
+--log                 log to $TMPDIR/vt420.log (text mode)
 --show-mapper / --show-vram   debug overlays (text mode)
 -v                    verbose logging
 ```
@@ -128,7 +128,7 @@ Text mode is commanded via Ctrl+G: `q` quit, space pause, `1`–`5` = F1–F5,
 `/dev/ttyUSB*` or `/dev/ttyS*` on Linux, `/dev/cuaU*` on the BSDs.
 
 ```
-./ezalb --display graphics \
+./vt420 --display graphics \
     --comm1 'serial /dev/cu.usbserial-1410'
 ```
 
@@ -139,14 +139,14 @@ maximum, the SCN2681's own ceiling.
 
 ## MCP server — drive the VT420 from Claude Code
 
-`ezalb --mcp` runs the machine headless behind an
+`vt420 --mcp` runs the machine headless behind an
 [MCP](https://modelcontextprotocol.io) server on stdio, so an AI agent can use
 the terminal like a person at the console: run full-screen applications on the
 serial ports, type on the LK201, watch the screen. This repo ships a
 `.mcp.json` that starts it with a shell on comm1; for your own project:
 
 ```
-claude mcp add vt420 -- /path/to/ezalb --mcp --skip-diagnostics \
+claude mcp add vt420 -- /path/to/vt420 --mcp --skip-diagnostics \
     --nvr ~/.vt420.nvr --comm1 'exec /bin/sh'
 ```
 

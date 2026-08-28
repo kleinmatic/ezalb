@@ -9,20 +9,20 @@ TOP=/tmp/rpmtop
 # host .o files are foreign objects here (and vice versa) — always rebuild
 cd "$ROOT"
 find . -name '*.o' -delete
-rm -f ezalb boot_test
-make ezalb
+rm -f vt420 boot_test
+make vt420
 
 rpmbuild -bb \
     --define "_topdir $TOP" \
     --define "pkgver $VERSION" \
     --define "srcroot $ROOT" \
-    packaging/rpm/ezalb.spec
+    packaging/rpm/vt420.spec
 
 mkdir -p "$OUT"
-cp "$TOP"/RPMS/*/ezalb-*.rpm "$OUT/"
+cp "$TOP"/RPMS/*/vt420-*.rpm "$OUT/"
 
 # leave no foreign objects behind for the host (build/roms would be root-owned)
 find . -name '*.o' -delete
-rm -rf ezalb boot_test build/roms
+rm -rf vt420 boot_test build/roms
 
-ls -la "$OUT"/ezalb-*.rpm
+ls -la "$OUT"/vt420-*.rpm
