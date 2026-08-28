@@ -32,13 +32,38 @@ int comm_connect_session(comm_session *cs, duart_channel channel,
     cs->channel = channel;
     cs->pending_rx = -1;
     cs->pending_tx = -1;
+    cs->tx_closed = false;
+    cs->rx_closed = false;
     return 0;
+}
+
+/* An ordinary far-end close arrives as an error code. EPIPE is the reader
+ * thread's EOF synthesis (ssu/session.c); ENOTCONN means the channel is
+ * gone; EIO is what a pty master read returns on Linux once the child has
+ * exited, i.e. every `exec` session that ends normally. Since the latch
+ * makes this the only line anyone sees, it should read as a disconnect
+ * notice. A real I/O failure keeps its ERROR. */
+static bool is_disconnect(int err)
+{
+    return err == EPIPE || err == SSU_ENOTCONN || err == EIO;
 }
 
 void comm_session_tick(comm_session *cs)
 {
     uint8_t byte;
     bool have = false;
+
+    /* A disconnect is permanent, so each direction latches and logs once.
+     * The two directions are separate ssu_chans with separate pump threads
+     * and they die independently — `exec ... --no-pty` hands out two pipes,
+     * so a child can close stdin and keep writing stdout. One shared flag
+     * would let a dead write side silence a live read side.
+     *
+     * Only the receive side stops polling: it is polled every tick, and that
+     * is where the flood came from. The send side keeps draining the DUART
+     * ring even once dead, because XON/XOFF ride that ring and the xonoff
+     * gate consumes them before they reach the session — stop draining and
+     * flow control freezes at whatever it last saw. */
 
     /* DUART's send to session's send */
     if (cs->pending_rx >= 0) {
@@ -53,7 +78,13 @@ void comm_session_tick(comm_session *cs)
         case SESS_OK:
             break;
         case SESS_ERR:
-            LOG_ERRORF("Failed to send byte: %s", strerror(errno));
+            if (!cs->tx_closed) {
+                if (is_disconnect(errno))
+                    LOG_INFOF("Session send side disconnected: %s", strerror(errno));
+                else
+                    LOG_ERRORF("Failed to send byte: %s", strerror(errno));
+                cs->tx_closed = true;
+            }
             break;
         case SESS_WOULD_BLOCK:
             cs->pending_rx = byte;
@@ -67,13 +98,17 @@ void comm_session_tick(comm_session *cs)
         byte = (uint8_t)cs->pending_tx;
         cs->pending_tx = -1;
         have = true;
-    } else {
+    } else if (!cs->rx_closed) {
         switch (cs->session.recv(cs->session.recv_self, &byte)) {
         case SESS_OK:
             have = true;
             break;
         case SESS_ERR:
-            LOG_ERRORF("Failed to receive byte: %s", strerror(errno));
+            if (is_disconnect(errno))
+                LOG_INFOF("Session receive side disconnected: %s", strerror(errno));
+            else
+                LOG_ERRORF("Failed to receive byte: %s", strerror(errno));
+            cs->rx_closed = true;
             break;
         case SESS_WOULD_BLOCK:
             break;

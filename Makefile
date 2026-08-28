@@ -30,8 +30,12 @@ ezalb: $(OBJS) main.o
 boot_test: $(OBJS) tests/boot_test.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-test: boot_test
+comm_test: $(OBJS) tests/comm_test.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+test: boot_test comm_test
 	./boot_test roms/vt420/23-068E9-00.bin
+	./comm_test
 
 mcp_test: ezalb
 	tests/mcp_test.sh ./ezalb roms/vt420/23-068E9-00.bin
@@ -40,7 +44,7 @@ mcp_test: ezalb
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJS) main.o tests/boot_test.o ezalb boot_test
+	rm -f $(OBJS) main.o tests/boot_test.o tests/comm_test.o ezalb boot_test comm_test
 	rm -rf $(BUILD)
 
 # ---- macOS app bundle / dmg / notarized release ----

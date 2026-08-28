@@ -20,6 +20,7 @@ typedef struct comm_session {
     session_parts session; /* xonoff-wrapped endpoints */
     duart_channel channel; /* host end: rx = from DUART, tx = to DUART */
     int pending_rx, pending_tx; /* -1 = none, else 0..255 */
+    bool tx_closed, rx_closed; /* far end gone: logged once; rx stops polling */
 } comm_session;
 
 /* connect_duart: session_config_start + xonoff_wrap + connect. 0 / -1. */

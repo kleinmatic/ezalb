@@ -1,6 +1,7 @@
 *.o
 ezalb
 boot_test
+comm_test
 .clangd
 .DS_Store
 build/
