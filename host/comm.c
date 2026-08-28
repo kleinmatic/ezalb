@@ -53,16 +53,20 @@ void comm_session_tick(comm_session *cs)
     uint8_t byte;
     bool have = false;
 
-    /* A disconnect is permanent: latch it, log once, stop polling that
-     * direction. The two directions are separate ssu_chans with separate
-     * pump threads and they die independently — `exec ... --no-pty` hands
-     * out two pipes, so a child can close stdin and keep writing stdout.
-     * One shared flag would let a dead write side silence a live read side. */
+    /* A disconnect is permanent, so each direction latches and logs once.
+     * The two directions are separate ssu_chans with separate pump threads
+     * and they die independently — `exec ... --no-pty` hands out two pipes,
+     * so a child can close stdin and keep writing stdout. One shared flag
+     * would let a dead write side silence a live read side.
+     *
+     * Only the receive side stops polling: it is polled every tick, and that
+     * is where the flood came from. The send side keeps draining the DUART
+     * ring even once dead, because XON/XOFF ride that ring and the xonoff
+     * gate consumes them before they reach the session — stop draining and
+     * flow control freezes at whatever it last saw. */
 
     /* DUART's send to session's send */
-    if (cs->tx_closed) {
-        have = false;
-    } else if (cs->pending_rx >= 0) {
+    if (cs->pending_rx >= 0) {
         byte = (uint8_t)cs->pending_rx;
         cs->pending_rx = -1;
         have = true;
@@ -74,11 +78,13 @@ void comm_session_tick(comm_session *cs)
         case SESS_OK:
             break;
         case SESS_ERR:
-            if (is_disconnect(errno))
-                LOG_INFOF("Session send side disconnected: %s", strerror(errno));
-            else
-                LOG_ERRORF("Failed to send byte: %s", strerror(errno));
-            cs->tx_closed = true;
+            if (!cs->tx_closed) {
+                if (is_disconnect(errno))
+                    LOG_INFOF("Session send side disconnected: %s", strerror(errno));
+                else
+                    LOG_ERRORF("Failed to send byte: %s", strerror(errno));
+                cs->tx_closed = true;
+            }
             break;
         case SESS_WOULD_BLOCK:
             cs->pending_rx = byte;

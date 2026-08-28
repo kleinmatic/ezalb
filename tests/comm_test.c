@@ -58,6 +58,15 @@ static void fake_destroy(session_parts *parts)
     memset(parts, 0, sizeof *parts);
 }
 
+/* ---- log counting ------------------------------------------------------ */
+
+static int log_lines;
+
+static void counting_sink(log_level lvl, const char *msg)
+{
+    log_lines++;
+}
+
 /* ---- harness ----------------------------------------------------------- */
 
 typedef struct rig {
@@ -86,6 +95,7 @@ static void rig_init(rig *r)
     byte_ring_push(r->term.tx, SSU_XON);
     comm_session_tick(&r->cs);
     r->f.send_calls = r->f.recv_calls = 0; /* count from a settled session */
+    log_lines = 0;
 }
 
 /* One tick, draining anything that reached the terminal (the ring holds 16). */
@@ -128,15 +138,47 @@ static void test_dead_send_keeps_recv_alive(void)
 
     byte_ring_push(r.term.tx, 'A'); /* a keystroke, to trip the send path */
     int got = rig_tick(&r);
-    check(r.f.send_calls == 1, "send polled once", 1, r.f.send_calls);
+    check(log_lines == 1, "disconnect logged once", 1, log_lines);
 
     for (int i = 0; i < 32; i++) {
         byte_ring_push(r.term.tx, 'B'); /* keep typing at a dead write side */
         got += rig_tick(&r);
     }
-    check(r.f.send_calls == 1, "send not polled again", 1, r.f.send_calls);
+    check(log_lines == 1, "not logged again", 1, log_lines);
     check(got == 16, "bytes reached the terminal", 16, got);
     check(r.f.recv_calls >= 16, "receive still polled", 16, r.f.recv_calls);
+
+    comm_session_destroy(&r.cs);
+}
+
+/* A dead write side still has to drain the DUART ring: XON/XOFF ride it, and
+ * the xonoff gate consumes them before the session sees them. Latch the ring
+ * shut and an XOFF never lands — the terminal asks the emulator to stop and
+ * it keeps pushing. */
+static void test_dead_send_honors_flow_control(void)
+{
+    rig r;
+    int got = 0;
+
+    printf("send side dies, flow control still works:\n");
+    rig_init(&r);
+    r.f.send_status = SESS_ERR;
+    r.f.send_err = EPIPE;
+
+    byte_ring_push(r.term.tx, 'A'); /* trip the send path, latching tx */
+    rig_tick(&r);
+
+    byte_ring_push(r.term.tx, SSU_XOFF); /* firmware: stop sending */
+    r.f.feed = 40;
+    for (int i = 0; i < 60; i++)
+        got += rig_tick(&r);
+    check(got == 0, "nothing pushed after XOFF", 0, got);
+
+    byte_ring_push(r.term.tx, SSU_XON); /* firmware: resume */
+    for (int i = 0; i < 60; i++)
+        got += rig_tick(&r);
+    check(got == 40, "flow resumes after XON", 40, got);
+    check(log_lines == 1, "still one disconnect line", 1, log_lines);
 
     comm_session_destroy(&r.cs);
 }
@@ -159,12 +201,14 @@ static void test_dead_recv_latches_and_send_lives(void)
         rig_tick(&r);
     }
     check(r.f.recv_calls == 1, "receive not polled again", 1, r.f.recv_calls);
+    check(log_lines == 1, "logged once", 1, log_lines);
     check(r.f.sent_len == 32, "keystrokes still delivered", 32, r.f.sent_len);
 
     comm_session_destroy(&r.cs);
 }
 
-/* Both directions gone: the session goes fully quiet. */
+/* Both directions gone: the session stops polling the read side and says so
+ * exactly once per direction. */
 static void test_both_closed(void)
 {
     rig r;
@@ -178,13 +222,13 @@ static void test_both_closed(void)
 
     byte_ring_push(r.term.tx, 'A');
     rig_tick(&r);
-    int send_after = r.f.send_calls, recv_after = r.f.recv_calls;
+    int recv_after = r.f.recv_calls;
 
     for (int i = 0; i < 32; i++) {
         byte_ring_push(r.term.tx, 'B');
         rig_tick(&r);
     }
-    check(r.f.send_calls == send_after, "send quiet", send_after, r.f.send_calls);
+    check(log_lines == 2, "one line per direction", 2, log_lines);
     check(r.f.recv_calls == recv_after, "receive quiet", recv_after, r.f.recv_calls);
 
     comm_session_destroy(&r.cs);
@@ -192,7 +236,11 @@ static void test_both_closed(void)
 
 int main(void)
 {
+    g_log_level = LOG_INFO;
+    log_set_sink(counting_sink);
+
     test_dead_send_keeps_recv_alive();
+    test_dead_send_honors_flow_control();
     test_dead_recv_latches_and_send_lives();
     test_both_closed();
 
