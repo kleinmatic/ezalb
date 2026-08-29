@@ -44,6 +44,7 @@ typedef struct vt_ctl {
     bool   quit;   /* under mu */
     bool   paused; /* under mu; time then advances only via ctl ops */
     double speed;  /* under mu; x real time, <= 0 = unlimited */
+    int    busy;   /* under mu; >0 while a client request is being served */
 } vt_ctl;
 
 /* Boots the machine (runs the 0x800000 diagnostics fast-forward inline when
@@ -100,6 +101,12 @@ int  ctl_reset(vt_ctl *c, char *err, size_t errlen);
 int  ctl_session(vt_ctl *c, int port, const char *cfg, char *err, size_t errlen);
 
 void ctl_pace(vt_ctl *c, bool paused, double speed);
+
+/* Bracket a client request. Between requests nobody is watching, so the
+ * machine drops to real time instead of free-running at speed x; a server
+ * left open would otherwise pin a core forever. */
+#define CTL_IDLE_SPEED 1.0
+void ctl_busy(vt_ctl *c, bool on);
 void ctl_get_status(vt_ctl *c, ctl_status_info *out);
 
 #endif

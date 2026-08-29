@@ -98,15 +98,19 @@ static void rig_init(rig *r)
     log_lines = 0;
 }
 
-/* One tick, draining anything that reached the terminal (the ring holds 16). */
+/* One receive-poll cycle — comm_session_tick only polls the session every
+ * COMM_RX_STRIDE ticks — draining anything that reached the terminal
+ * (the ring holds 16). */
 static int rig_tick(rig *r)
 {
     uint8_t b;
     int got = 0;
 
-    comm_session_tick(&r->cs);
-    while (byte_ring_pop(r->term.rx, &b))
-        got++;
+    for (unsigned i = 0; i < COMM_RX_STRIDE; i++) {
+        comm_session_tick(&r->cs);
+        while (byte_ring_pop(r->term.rx, &b))
+            got++;
+    }
     return got;
 }
 

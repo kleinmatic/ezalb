@@ -474,7 +474,6 @@ static void nvr_save_file(const char *path, const uint8_t *mem)
 void vt420_system_step(vt420_system *sys, i8051_cpu *cpu)
 {
     sys->instruction_count++;
-    uint64_t start = monotonic_ns();
 
     uint32_t pc = i8051_pc_ext(cpu, &sys->ctx);
     uint8_t prev_0x1f = cpu->internal_ram[0x1f];
@@ -521,10 +520,6 @@ void vt420_system_step(vt420_system *sys, i8051_cpu *cpu)
             nvr_save_file(sys->nvr_file, sys->memory.nvr.mem);
         sys->nvr_write = sys->memory.nvr.write_count;
     }
-
-    uint64_t elapsed = monotonic_ns() - start;
-    if (elapsed > 100000000ull)
-        LOG_WARNF("Step took too long: %llums", (unsigned long long)(elapsed / 1000000ull));
 }
 
 static void vt420_machine_step(void *sys, i8051_cpu *cpu)

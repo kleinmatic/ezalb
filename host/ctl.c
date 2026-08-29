@@ -432,7 +432,11 @@ static void *emu_main(void *arg)
             return NULL;
         }
         bool paused = c->paused;
+        /* Idle between requests: nothing observes the machine, so real time
+         * is plenty and the thread gets to sleep. */
         double speed = c->speed;
+        if (!c->busy && (speed <= 0 || speed > CTL_IDLE_SPEED))
+            speed = CTL_IDLE_SPEED;
         if (!paused)
             step_n_locked(c, CTL_CHUNK);
         pthread_mutex_unlock(&c->mu);
@@ -839,5 +843,14 @@ void ctl_get_status(vt_ctl *c, ctl_status_info *out)
     out->kbd_pending = byte_ring_len(&c->sys->kbd_to_term);
     out->comm1 = c->comm_cfg[0] ? c->comm_cfg[0] : "loopback";
     out->comm2 = c->comm_cfg[1] ? c->comm_cfg[1] : "loopback";
+    pthread_mutex_unlock(&c->mu);
+}
+
+void ctl_busy(vt_ctl *c, bool on)
+{
+    pthread_mutex_lock(&c->mu);
+    c->busy += on ? 1 : -1;
+    if (c->busy < 0)
+        c->busy = 0;
     pthread_mutex_unlock(&c->mu);
 }

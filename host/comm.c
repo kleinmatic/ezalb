@@ -1,5 +1,6 @@
 /* host/comm.rs — CommSession: pumps bytes between a DUART channel and an
- * xonoff-gated session, one byte per direction per tick with hold-back. */
+ * xonoff-gated session, one byte per direction per tick with hold-back.
+ * The receive poll runs every COMM_RX_STRIDE ticks. */
 #include <errno.h>
 #include <string.h>
 
@@ -61,7 +62,7 @@ void comm_session_tick(comm_session *cs)
      * so a child can close stdin and keep writing stdout. One shared flag
      * would let a dead write side silence a live read side.
      *
-     * Only the receive side stops polling: it is polled every tick, and that
+     * Only the receive side stops polling: it is polled on a timer, and that
      * is where the flood came from. The send side keeps draining the DUART
      * ring even once dead, because XON/XOFF ride that ring and the xonoff
      * gate consumes them before they reach the session — stop draining and
@@ -107,7 +108,7 @@ void comm_session_tick(comm_session *cs)
         byte = (uint8_t)cs->pending_tx;
         cs->pending_tx = -1;
         have = true;
-    } else if (!cs->rx_closed) {
+    } else if (!cs->rx_closed && ++cs->rx_poll % COMM_RX_STRIDE == 0) {
         switch (cs->session.recv(cs->session.recv_self, &byte)) {
         case SESS_OK:
             have = true;

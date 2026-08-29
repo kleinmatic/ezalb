@@ -538,8 +538,11 @@ int mcp_run(const uint8_t *rom, uint32_t rom_len, const char *nvr_path,
 
     char *line = NULL;
     size_t cap = 0;
-    while (getline(&line, &cap, stdin) > 0)
+    while (getline(&line, &cap, stdin) > 0) {
+        ctl_busy(&g_ctl, true);   /* full speed while serving */
         handle_line(line);
+        ctl_busy(&g_ctl, false);
+    }
 
     free(line);
     ctl_stop(&g_ctl);

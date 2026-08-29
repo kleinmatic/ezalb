@@ -10,6 +10,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -114,6 +115,11 @@ typedef struct ssu_chan {
     ssu_chan_elem   ring[SSU_CHAN_CAP];
     uint32_t        head, len;
     bool            closed;
+    /* Mirrors of len/closed, readable without the mutex: the emulation
+     * thread polls try_recv once per emulated instruction, and an empty
+     * ring is the overwhelmingly common case. */
+    _Atomic uint32_t alen;
+    _Atomic bool     aclosed;
     int             refs;
 } ssu_chan;
 

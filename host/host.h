@@ -22,7 +22,12 @@ typedef struct comm_session {
     int pending_rx, pending_tx; /* -1 = none, else 0..255 */
     bool tx_closed, rx_closed; /* far end gone: logged once; rx stops polling */
     uint32_t line_seq;     /* last channel.line_seq pushed to the session */
+    uint32_t rx_poll;      /* tick counter for the COMM_RX_STRIDE divider */
 } comm_session;
+
+/* The DUART takes at most one byte per DUART_COOLDOWN_TICKS, so polling the
+ * session for one on every emulated instruction is ~100x oversampled. */
+#define COMM_RX_STRIDE 16u
 
 /* connect_duart: session_config_start + xonoff_wrap + connect. 0 / -1. */
 int  comm_connect_duart(comm_session *cs, duart_channel channel,
@@ -59,6 +64,23 @@ void fb_render_frame(const vt420_system *sys, uint8_t *frame);
 #define FB_STEP_NORMAL 20000
 #define FB_STEP_FAST   100000
 void fb_stepper_update(vt420_system *sys, i8051_cpu *cpu);
+
+/* Idle throttle (sdl.c). The firmware has no halt instruction — it spins a
+ * ~39-instruction service loop 30k times a second whatever else is going on —
+ * so the only honest "nothing is happening" signal is that the raster has
+ * stopped producing new content. An idle screen still alternates between two
+ * images as the cursor blinks, so both count as nothing new.
+ *
+ * Throttling means running one whole update every FB_IDLE_EVERY ticks rather
+ * than a smaller update every tick: fb_stepper_update pays a ~4300-step
+ * status-bar tail per call, which a shrunken update cannot amortize.
+ *
+ * Slowing the machine also slows the firmware's cursor blink, so the entry
+ * price is deliberately steep: FB_IDLE_AFTER renders (~10 s at the 30 fps
+ * render cap) of nothing new. Lower it to save sooner, at the cost of a
+ * visibly lazy cursor not long after you stop typing. */
+#define FB_IDLE_AFTER 300
+#define FB_IDLE_EVERY 10
 
 /* host/wgpu constants + frame policy (policy.rs; implemented in sdl.c) */
 #define FB_MAX_SURFACE  4096u

@@ -59,8 +59,13 @@ void log_emit(log_level lvl, const char *fmt, ...)
 
 uint64_t monotonic_ns(void)
 {
+#ifdef __APPLE__
+    /* clock_gettime(CLOCK_MONOTONIC) here detours through gettimeofday */
+    return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+#else
     struct timespec ts;
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+#endif
 }

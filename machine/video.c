@@ -35,11 +35,14 @@ void vmapper_init(vmapper *m)
 void vmapper_set(vmapper *m, uint8_t off, uint8_t value)
 {
     if (off >= 3 && off <= 5) {
-        static const uint8_t strange[3] = { 0xa0, 0xec, 0xdb };
+        /* 7ff3 bit 5 is chargen-disable: the firmware toggles it every frame
+         * over vertical blanking, so it is not strange and logging it floods
+         * stderr at 60 Hz. */
+        static const uint8_t strange[3] = { 0xa0 & ~0x20, 0xec, 0xdb };
         uint8_t sb = strange[off - 3];
         uint8_t changed = (uint8_t)((m->mapper[off] ^ value) & sb);
         if (changed)
-            LOG_INFOF("VIDEO: Strange bits %s in 7ff%u changed: %s -> %s",
+            LOG_DEBUGF("VIDEO: Strange bits %s in 7ff%u changed: %s -> %s",
                       bin8(changed).s, (unsigned)off,
                       bin8(m->mapper[off] & sb).s, bin8(value & sb).s);
     }

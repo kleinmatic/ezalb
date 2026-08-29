@@ -4,6 +4,7 @@
 
 #include <SDL.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "host/gif.h"
 
@@ -204,6 +205,20 @@ size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu,
     frame_policy policy;
     frame_policy_init(&policy);
 
+    /* An idle terminal rasterizes to the same pixels for minutes on end (the
+     * firmware keeps rewriting row descriptors regardless), so compare the
+     * raster, not its inputs, and skip the upload and the present. */
+    /* shown = last presented raster, alt = the distinct one before it. A
+     * still screen repeats shown; a blinking cursor on a still screen just
+     * alternates the two. Either way nothing is happening. A third image is
+     * real activity. */
+    uint8_t *shown = calloc(1, FB_FRAME_BYTES);
+    uint8_t *alt = calloc(1, FB_FRAME_BYTES);
+    bool have_shown = false, have_alt = false;
+    uint32_t still = 0;     /* consecutive renders with no new content */
+    uint32_t idle_tick = 0; /* tick counter for the FB_IDLE_EVERY divider */
+    bool stepped = false;   /* machine advanced since the last render */
+
     bool quit = false;
     while (!quit) {
         frame_policy_plan_tick(&policy);
@@ -215,33 +230,66 @@ size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu,
                 quit = true;
                 break;
             case SDL_WINDOWEVENT:
-                if (ev.window.event == SDL_WINDOWEVENT_CLOSE)
+                if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
                     quit = true;
-                else if (ev.window.event == SDL_WINDOWEVENT_EXPOSED)
+                } else if (ev.window.event == SDL_WINDOWEVENT_EXPOSED ||
+                           ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                           ev.window.event == SDL_WINDOWEVENT_SHOWN ||
+                           ev.window.event == SDL_WINDOWEVENT_RESTORED) {
+                    have_shown = false; /* the window lost its contents */
                     frame_policy_on_request_redraw(&policy);
+                }
                 break;
             case SDL_TEXTINPUT:
                 handle_textinput(&ev.text, sender);
+                still = 0; /* a keystroke needs the machine at full speed */
                 break;
             case SDL_KEYDOWN:
                 handle_keydown(&ev.key, sender);
+                still = 0;
                 break;
             }
         }
         if (quit)
             break;
 
-        for (uint32_t i = 0; i < policy.updates_to_run; i++)
+        uint32_t updates = policy.updates_to_run;
+        if (still >= FB_IDLE_AFTER && ++idle_tick % FB_IDLE_EVERY != 0)
+            updates = 0; /* idle: one full update per FB_IDLE_EVERY ticks */
+        for (uint32_t i = 0; i < updates; i++)
             fb_stepper_update(sys, cpu);
+        stepped |= updates > 0;
 
-        if (policy.will_redraw) {
+        /* No steps since the last render means VRAM cannot have moved, so
+         * neither can the raster: skip it rather than redraw the same pixels.
+         * Rasterizing is what dominates once the machine is throttled. */
+        if (policy.will_redraw && !stepped && have_shown) {
+            frame_policy_on_presented(&policy);
+        } else if (policy.will_redraw) {
+            stepped = false;
             fb_render_frame(sys, frame);
-            if (SDL_UpdateTexture(tex, NULL, frame, FB_STRIDE) != 0 ||
-                SDL_RenderCopy(ren, tex, NULL, NULL) != 0) {
+            bool same_shown = have_shown && memcmp(frame, shown, FB_FRAME_BYTES) == 0;
+            bool same_alt = have_alt && memcmp(frame, alt, FB_FRAME_BYTES) == 0;
+
+            if (!same_shown && !same_alt)
+                still = 0;
+            else if (still < FB_IDLE_AFTER)
+                still++;
+
+            if (same_shown) {
+                frame_policy_on_presented(&policy); /* nothing to upload */
+            } else if (SDL_UpdateTexture(tex, NULL, frame, FB_STRIDE) != 0 ||
+                       SDL_RenderCopy(ren, tex, NULL, NULL) != 0) {
                 LOG_ERRORF("Graphics: render failed: %s", SDL_GetError());
                 frame_policy_on_present_failed_retry(&policy);
             } else {
-                SDL_RenderPresent(ren);
+                SDL_RenderPresent(ren); /* the cursor must still visibly blink */
+                if (shown && alt) {
+                    memcpy(alt, shown, FB_FRAME_BYTES);
+                    have_alt = have_shown;
+                    memcpy(shown, frame, FB_FRAME_BYTES);
+                    have_shown = true;
+                }
                 frame_policy_on_presented(&policy);
             }
         }
@@ -281,6 +329,8 @@ size_t screen_graphics_run(vt420_system *sys, i8051_cpu *cpu,
     }
 
     size_t count = sys->instruction_count;
+    free(alt);
+    free(shown);
     free(frame);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);

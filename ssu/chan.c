@@ -49,6 +49,7 @@ void ssu_chan_close(ssu_chan *c)
         return;
     pthread_mutex_lock(&c->mu);
     c->closed = true;
+    atomic_store_explicit(&c->aclosed, true, memory_order_release);
     pthread_cond_broadcast(&c->not_empty);
     pthread_cond_broadcast(&c->not_full);
     pthread_mutex_unlock(&c->mu);
@@ -58,6 +59,7 @@ static void chan_push(ssu_chan *c, ssu_chan_elem e)
 {
     c->ring[(c->head + c->len) % SSU_CHAN_CAP] = e;
     c->len++;
+    atomic_store_explicit(&c->alen, c->len, memory_order_release);
     pthread_cond_signal(&c->not_empty);
 }
 
@@ -66,6 +68,7 @@ static void chan_pop(ssu_chan *c, ssu_chan_elem *out)
     *out = c->ring[c->head];
     c->head = (c->head + 1) % SSU_CHAN_CAP;
     c->len--;
+    atomic_store_explicit(&c->alen, c->len, memory_order_release);
     pthread_cond_signal(&c->not_full);
 }
 
@@ -88,6 +91,9 @@ int ssu_chan_try_send(ssu_chan *c, ssu_chan_elem e)
 /* Rust parity: in-flight elements are still delivered after close. */
 int ssu_chan_try_recv(ssu_chan *c, ssu_chan_elem *out)
 {
+    if (atomic_load_explicit(&c->alen, memory_order_acquire) == 0 &&
+        !atomic_load_explicit(&c->aclosed, memory_order_acquire))
+        return 0;
     pthread_mutex_lock(&c->mu);
     int r;
     if (c->len > 0) {
